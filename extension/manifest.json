@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Paper Viewer",
+  "version": "1.0",
+
+  "permissions": [
+    "tabs",
+    "webNavigation"
+  ],
+
+  "host_permissions": [
+    "<all_urls>"
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "web_accessible_resources": [
+    {
+      "resources": ["index.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

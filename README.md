@@ -9,41 +9,60 @@
 1.Repositoryをclone
 
 VSCodeのターミナルで
+
 ```Bash
 git clone https://github.com/Taiyo3901/Hackathon.v1.git
 ```
+
 ```Bash
 cd Hackathon.v1
 ```
+
 2. npm install
+
 ```Bash
 npm install
 ```
+
 3. 開発サーバ起動
+
 ```Bash
 npm run dev
 ```
+
 4. build
+
 ```Bash
 npm run build
 ```
+
 5. manifest/backgroundコピー
+
 毎回必要。
 PowerShellなら：
 ```PowerShell
 copy extension\manifest.json dist\
 copy extension\background.js dist\
 ```
+
 6. Chromeへ読み込み
 Chromeで：
+
 chrome://extensions
+
 ↓
+
 デベロッパーモード ON
+
 ↓
+
 パッケージ化されていない拡張機能を読み込む
+
 ↓
+
 distフォルダ選択
-7. テスト
+
+8. テスト
 適当なPDFファイルを開く
 
 # React + TypeScript + Vite

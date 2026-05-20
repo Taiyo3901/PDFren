@@ -46,6 +46,7 @@ copy extension\background.js dist\
 ```
 
 6. Chromeへ読み込み
+
 Chromeで：
 
 chrome://extensions

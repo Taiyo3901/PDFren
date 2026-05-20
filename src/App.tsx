@@ -34,37 +34,47 @@ export default function App() {
         await getDocument(fileUrl)
           .promise;
 
-      const page =
-        await pdf.getPage(1);
+      ref.current!.innerHTML = "";
 
-      const viewport =
-        page.getViewport({
-          scale: 1.5,
-        });
+      for (
+        let i = 1;
+        i <= pdf.numPages;
+        i++
+      ) {
 
-      const canvas =
-        document.createElement("canvas");
+        const page =
+          await pdf.getPage(i);
 
-      const context =
-        canvas.getContext("2d");
+        const viewport =
+          page.getViewport({
+            scale: 1.5,
+          });
 
-      if (!context) return;
+        const canvas =
+          document.createElement("canvas");
 
-      canvas.width =
-        viewport.width;
+        const context =
+          canvas.getContext("2d");
 
-      canvas.height =
-        viewport.height;
+        if (!context) continue;
 
-      await page.render({
-        canvasContext: context,
-        viewport,
-        canvas,
-      }).promise;
+        canvas.width =
+          viewport.width;
 
-      ref.current?.appendChild(canvas);
+        canvas.height =
+          viewport.height;
 
-      console.log("render done");
+        canvas.style.marginBottom =
+          "20px";
+
+        await page.render({
+          canvasContext: context,
+          viewport,
+          canvas,
+        }).promise;
+
+        ref.current?.appendChild(canvas);
+      }
     }
 
     run();

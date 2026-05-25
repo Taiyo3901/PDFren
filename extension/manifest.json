@@ -1,24 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "Paper Viewer",
+  "name": "Paper PDF Analyzer",
   "version": "1.0",
-
-  "permissions": [
-    "tabs",
-    "webNavigation"
-  ],
-
-  "host_permissions": [
-    "<all_urls>"
-  ],
-
+  "permissions": ["tabs"],
+  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
   },
-
   "web_accessible_resources": [
     {
-      "resources": ["index.html"],
+      "resources": ["*"],
       "matches": ["<all_urls>"]
     }
   ]

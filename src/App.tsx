@@ -38,7 +38,6 @@ class ErrorBoundary extends React.Component<
       return (
         <div className="error-screen">
           <h1>アプリでエラーが発生しました</h1>
-
           <pre>
             {this.state.message}
             {"\n\n"}

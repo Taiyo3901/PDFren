@@ -1,5 +1,4 @@
-import { useEffect, useRef } from "react";
-import { pdfjsLib } from "../lib/pdfjs";
+import { useEffect, useMemo, useRef } from "react";import { pdfjsLib } from "../lib/pdfjs";
 import type { PdfTextItem } from "../types/pdf";
 
 type TextLayerProps = {
@@ -18,6 +17,19 @@ type PositionedTextItem = {
   height: number;
 };
 
+function getTextContentSignature(textContent: any): string {
+  const items = textContent?.items as any[] | undefined;
+
+  if (!items || items.length === 0) {
+    return "empty";
+  }
+
+  const first = String(items[0]?.str ?? "");
+  const last = String(items[items.length - 1]?.str ?? "");
+
+  return `${items.length}:${first}:${last}`;
+}
+
 export function TextLayer({
   textContent,
   viewport,
@@ -26,6 +38,39 @@ export function TextLayer({
   onItems,
 }: TextLayerProps) {
   const layerRef = useRef<HTMLDivElement | null>(null);
+  const onItemsRef = useRef<TextLayerProps["onItems"]>(onItems);
+
+  useEffect(() => {
+    onItemsRef.current = onItems;
+  }, [onItems]);
+
+  const renderKey = useMemo(() => {
+    return [
+      pageNumber,
+      viewport?.width,
+      viewport?.height,
+      viewport?.scale,
+      getTextContentSignature(textContent),
+      debug ? "debug" : "normal",
+    ].join("|");
+  }, [pageNumber, viewport, textContent, debug]);
+
+  useEffect(() => {
+    const container = layerRef.current;
+    if (!container) return;
+
+    const handleNativeSelectStart = (event: Event) => {
+      if (event.target === container) {
+        event.preventDefault();
+      }
+    };
+
+    container.addEventListener("selectstart", handleNativeSelectStart);
+
+    return () => {
+      container.removeEventListener("selectstart", handleNativeSelectStart);
+    };
+  }, []);
 
   useEffect(() => {
     const container = layerRef.current;
@@ -56,15 +101,17 @@ export function TextLayer({
 
         const width =
           Math.abs((item.width ?? 0) * viewport.scale) ||
-          Math.max(item.str.length * height * 0.5, 1);
+          Math.max(String(item.str).length * height * 0.5, 1);
 
-        return {
-          str: item.str,
+        const positionedItem: PositionedTextItem = {
+          str: String(item.str),
           x,
           y: baselineY - height,
           width,
           height,
         };
+
+        return positionedItem;
       })
       .sort((a, b) => {
         const yDiff = a.y - b.y;
@@ -77,9 +124,15 @@ export function TextLayer({
       });
 
     const exportedItems: PdfTextItem[] = positionedItems.map((item) => ({
-      ...item,
+      str: item.str,
+      x: item.x,
+      y: item.y,
+      width: item.width,
+      height: item.height,
       page: pageNumber,
     }));
+
+    const fragment = document.createDocumentFragment();
 
     for (const item of positionedItems) {
       const span = document.createElement("span");
@@ -90,9 +143,8 @@ export function TextLayer({
       span.style.position = "absolute";
       span.style.left = `${item.x}px`;
       span.style.top = `${item.y}px`;
-      span.style.width = `${item.width}px`;
-      span.style.height = `${item.height}px`;
-
+      span.style.width = `${Math.max(item.width, 1)}px`;
+      span.style.height = `${Math.max(item.height, 1)}px`;
       span.style.fontSize = `${item.height}px`;
       span.style.lineHeight = "1";
       span.style.whiteSpace = "pre";
@@ -114,11 +166,13 @@ export function TextLayer({
         span.style.background = "transparent";
       }
 
-      container.appendChild(span);
+      fragment.appendChild(span);
     }
 
-    onItems?.(pageNumber, exportedItems);
-  }, [textContent, viewport, pageNumber, debug, onItems]);
+    container.appendChild(fragment);
+
+    onItemsRef.current?.(pageNumber, exportedItems);
+  }, [renderKey, textContent, viewport, pageNumber, debug]);
 
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     if (event.target === event.currentTarget) {

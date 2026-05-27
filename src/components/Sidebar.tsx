@@ -1,4 +1,4 @@
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import { useMemo, useState } from "react";
 import type { FormulaCandidate, PaneId } from "../types/pdf";
 import { copyLatexToClipboard } from "../pdf/formula";
@@ -58,6 +58,12 @@ export function Sidebar({
 
     event.target.value = "";
   };
+
+  const effectiveLeftScale = Math.min(panes.left.userScale, panes.left.fitScale);
+  const effectiveRightScale = Math.min(
+    panes.right.userScale,
+    panes.right.fitScale
+  );
 
   const copyOne = async (formula: FormulaCandidate) => {
     await copyLatexToClipboard(formula.latex);
@@ -136,7 +142,8 @@ export function Sidebar({
               fileName={panes.left.title}
               pageNumber={panes.left.pageNumber}
               totalPages={panes.left.totalPages}
-              scale={panes.left.scale}
+              userScale={panes.left.userScale}
+              effectiveScale={effectiveLeftScale}
               onFileChange={handleFileChange}
               onClear={clearPdf}
               onZoomIn={() => zoomIn("left")}
@@ -154,7 +161,8 @@ export function Sidebar({
               fileName={panes.right.title}
               pageNumber={panes.right.pageNumber}
               totalPages={panes.right.totalPages}
-              scale={panes.right.scale}
+              userScale={panes.right.userScale}
+              effectiveScale={effectiveRightScale}
               onFileChange={handleFileChange}
               onClear={clearPdf}
               onZoomIn={() => zoomIn("right")}
@@ -205,7 +213,7 @@ type CollapsibleSectionProps = {
   title: string;
   open: boolean;
   onToggle: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 };
 
 function CollapsibleSection({
@@ -231,7 +239,8 @@ type PaneControlsProps = {
   fileName: string;
   pageNumber: number;
   totalPages: number;
-  scale: number;
+  userScale: number;
+  effectiveScale: number;
   onFileChange: (pane: PaneId, event: ChangeEvent<HTMLInputElement>) => void;
   onClear: (pane: PaneId) => void;
   onZoomIn: () => void;
@@ -243,7 +252,8 @@ function PaneControls({
   fileName,
   pageNumber,
   totalPages,
-  scale,
+  userScale,
+  effectiveScale,
   onFileChange,
   onClear,
   onZoomIn,
@@ -266,8 +276,12 @@ function PaneControls({
 
       <div className="control-row">
         <button onClick={onZoomOut}>-</button>
-        <span>{Math.round(scale * 100)}%</span>
+        <span>手動 {Math.round(userScale * 100)}%</span>
         <button onClick={onZoomIn}>+</button>
+      </div>
+
+      <div className="page-info">
+        表示倍率: {Math.round(effectiveScale * 100)}%
       </div>
 
       <div className="page-info">
@@ -275,7 +289,7 @@ function PaneControls({
       </div>
 
       <div className="hint">
-        通常スクロール: ページ移動 / Ctrl+wheel: PDFズーム
+        通常スクロール: ページ移動 / pinch or Ctrl+wheel: PDFズーム
       </div>
     </div>
   );

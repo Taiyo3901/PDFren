@@ -10,8 +10,12 @@ type TextItemsByPane = Record<PaneId, PdfTextItem[]>;
 export function SplitPdfViewer() {
   const loadPdf = useViewerStore((state) => state.loadPdf);
   const panes = useViewerStore((state) => state.panes);
+  const zoomIn = useViewerStore((state) => state.zoomIn);
+  const zoomOut = useViewerStore((state) => state.zoomOut);
 
+  const appRootRef = useRef<HTMLDivElement | null>(null);
   const viewerAreaRef = useRef<HTMLElement | null>(null);
+  const wheelLockRef = useRef(false);
 
   const [debugTextLayer, setDebugTextLayer] = useState(false);
   const [splitRatio, setSplitRatio] = useState(50);
@@ -26,10 +30,75 @@ export function SplitPdfViewer() {
     const params = new URLSearchParams(window.location.search);
     const pdfParam = params.get("pdf");
 
-    if (typeof pdfParam === "string" && pdfParam.length > 0) {
+    if (
+      typeof pdfParam === "string" &&
+      pdfParam.length > 0 &&
+      !panes.left.pdfUrl
+    ) {
       loadPdf("left", pdfParam, "URL PDF");
     }
-  }, [loadPdf]);
+  }, [loadPdf, panes.left.pdfUrl]);
+
+  useEffect(() => {
+    const root = appRootRef.current;
+    if (!root) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      const isZoomGesture = event.ctrlKey || event.metaKey;
+
+      if (!isZoomGesture) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const target = event.target;
+
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      const paneElement = target.closest("[data-pane-id]");
+
+      if (!paneElement) {
+        return;
+      }
+
+      const paneId = paneElement.getAttribute("data-pane-id");
+
+      if (paneId !== "left" && paneId !== "right") {
+        return;
+      }
+
+      if (wheelLockRef.current) {
+        return;
+      }
+
+      wheelLockRef.current = true;
+
+      if (event.deltaY < 0) {
+        zoomIn(paneId);
+      } else {
+        zoomOut(paneId);
+      }
+
+      window.setTimeout(() => {
+        wheelLockRef.current = false;
+      }, 40);
+    };
+
+    root.addEventListener("wheel", handleWheel, {
+      passive: false,
+      capture: true,
+    });
+
+    return () => {
+      root.removeEventListener("wheel", handleWheel, {
+        capture: true,
+      } as AddEventListenerOptions);
+    };
+  }, [zoomIn, zoomOut]);
 
   const handleTextItems = useCallback(
     (pane: PaneId, page: number, items: PdfTextItem[]) => {
@@ -38,7 +107,7 @@ export function SplitPdfViewer() {
 
         return {
           ...prev,
-          [pane]: [...filtered, ...items],
+          [pane]:[...filtered, ...items],
         };
       });
     },
@@ -47,7 +116,6 @@ export function SplitPdfViewer() {
 
   const hasLeftPdf = Boolean(panes.left.pdfUrl);
   const hasRightPdf = Boolean(panes.right.pdfUrl);
-
   const isSplitMode = hasLeftPdf && hasRightPdf;
 
   const visiblePanes: PaneId[] = useMemo(() => {
@@ -119,6 +187,7 @@ export function SplitPdfViewer() {
 
   return (
     <div
+      ref={appRootRef}
       className={
         isSidebarCollapsed
           ? "app-layout sidebar-collapsed"

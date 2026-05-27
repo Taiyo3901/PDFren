@@ -1,12 +1,13 @@
 import { create } from "zustand";
 import type { PaneId } from "../types/pdf";
 
-type PaneState = {
+export type PaneState = {
   pdfUrl: string | null;
   title: string;
   pageNumber: number;
   totalPages: number;
-  scale: number;
+  userScale: number;
+  fitScale: number;
 };
 
 type ViewerState = {
@@ -20,7 +21,8 @@ type ViewerState = {
 
   zoomIn: (pane: PaneId) => void;
   zoomOut: (pane: PaneId) => void;
-  setScale: (pane: PaneId, scale: number) => void;
+  setUserScale: (pane: PaneId, scale: number) => void;
+  setFitScale: (pane: PaneId, fitScale: number) => void;
 
   openLeftPdfOnRightDifferentPage: () => void;
 };
@@ -33,7 +35,8 @@ const initialPaneState: PaneState = {
   title: "未読み込み",
   pageNumber: 1,
   totalPages: 0,
-  scale: 1.2,
+  userScale: 1.2,
+  fitScale: MAX_SCALE,
 };
 
 function clampScale(scale: number): number {
@@ -56,6 +59,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
           title,
           pageNumber: 1,
           totalPages: 0,
+          fitScale: MAX_SCALE,
         },
       },
     })),
@@ -120,7 +124,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
           ...state.panes,
           [pane]: {
             ...current,
-            scale: clampScale(current.scale + 0.15),
+            userScale: clampScale(current.userScale + 0.15),
           },
         },
       };
@@ -135,18 +139,18 @@ export const useViewerStore = create<ViewerState>((set) => ({
           ...state.panes,
           [pane]: {
             ...current,
-            scale: clampScale(current.scale - 0.15),
+            userScale: clampScale(current.userScale - 0.15),
           },
         },
       };
     }),
 
-  setScale: (pane, scale) =>
+  setUserScale: (pane, scale) =>
     set((state) => {
       const current = state.panes[pane];
       const nextScale = clampScale(scale);
 
-      if (current.scale === nextScale) {
+      if (current.userScale === nextScale) {
         return state;
       }
 
@@ -155,7 +159,27 @@ export const useViewerStore = create<ViewerState>((set) => ({
           ...state.panes,
           [pane]: {
             ...current,
-            scale: nextScale,
+            userScale: nextScale,
+          },
+        },
+      };
+    }),
+
+  setFitScale: (pane, fitScale) =>
+    set((state) => {
+      const current = state.panes[pane];
+      const nextFitScale = clampScale(fitScale);
+
+      if (current.fitScale === nextFitScale) {
+        return state;
+      }
+
+      return {
+        panes: {
+          ...state.panes,
+          [pane]: {
+            ...current,
+            fitScale: nextFitScale,
           },
         },
       };
@@ -183,7 +207,8 @@ export const useViewerStore = create<ViewerState>((set) => ({
             title: `${left.title} / 別ページ`,
             pageNumber: preferredPage,
             totalPages: left.totalPages,
-            scale: left.scale,
+            userScale: left.userScale,
+            fitScale: MAX_SCALE,
           },
         },
       };

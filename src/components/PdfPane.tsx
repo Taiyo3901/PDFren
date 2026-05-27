@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { pdfjsLib } from "../lib/pdfjs";
 import { PdfPage } from "./PdfPage";
 import type { PaneId, PdfTextItem } from "../types/pdf";
@@ -10,6 +10,7 @@ type PdfPaneProps = {
   onTextItems: (pane: PaneId, page: number, items: PdfTextItem[]) => void;
 };
 
+const MIN_SCALE = 0.35;
 const PANE_HORIZONTAL_PADDING = 48;
 const AUTO_FIT_MARGIN = 24;
 
@@ -17,25 +18,24 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
   const paneState = useViewerStore((state) => state.panes[pane]);
   const setTotalPages = useViewerStore((state) => state.setTotalPages);
   const setPageNumber = useViewerStore((state) => state.setPageNumber);
-  const setScale = useViewerStore((state) => state.setScale);
-  const zoomIn = useViewerStore((state) => state.zoomIn);
-  const zoomOut = useViewerStore((state) => state.zoomOut);
+  const setFitScale = useViewerStore((state) => state.setFitScale);
 
   const containerRef = useRef<HTMLElement | null>(null);
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const tickingRef = useRef(false);
   const initialScrollDoneRef = useRef(false);
-  const basePageWidthRef = useRef<number | null>(null);
-  const lastAutoFitScaleRef = useRef<number | null>(null);
-  const wheelZoomLockRef = useRef(false);
 
   const [pdf, setPdf] = useState<any>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [basePageWidth, setBasePageWidth] = useState<number | null>(null);
+
+  const effectiveScale = useMemo(() => {
+    return Math.min(paneState.userScale, paneState.fitScale);
+  }, [paneState.userScale, paneState.fitScale]);
 
   useEffect(() => {
     initialScrollDoneRef.current = false;
-    basePageWidthRef.current = null;
-    lastAutoFitScaleRef.current = null;
+    setBasePageWidth(null);
 
     if (!paneState.pdfUrl) {
       setPdf(null);
@@ -60,7 +60,10 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
 
         const firstPage = await loadedPdf.getPage(1);
         const baseViewport = firstPage.getViewport({ scale: 1 });
-        basePageWidthRef.current = baseViewport.width;
+
+        if (!cancelled) {
+          setBasePageWidth(baseViewport.width);
+        }
       } catch (error) {
         console.error(`[${pane}] PDF load failed`, error);
 
@@ -82,42 +85,36 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
 
-    const fitToContainer = () => {
-      const baseWidth = basePageWidthRef.current;
-      if (!baseWidth) return;
+    if (!container || !basePageWidth) {
+      return;
+    }
 
+    const updateFitScale = () => {
       const availableWidth =
         container.clientWidth - PANE_HORIZONTAL_PADDING - AUTO_FIT_MARGIN;
 
-      if (availableWidth <= 0) return;
-
-      const maxScaleForWidth = availableWidth / baseWidth;
-      const currentRenderedWidth = baseWidth * paneState.scale;
-
-      if (currentRenderedWidth > availableWidth) {
-        const nextScale = Math.max(0.35, Math.min(paneState.scale, maxScaleForWidth));
-
-        if (Math.abs(nextScale - paneState.scale) > 0.02) {
-          lastAutoFitScaleRef.current = nextScale;
-          setScale(pane, nextScale);
-        }
+      if (availableWidth <= 0) {
+        return;
       }
+
+      const nextFitScale = Math.max(MIN_SCALE, availableWidth / basePageWidth);
+
+      setFitScale(pane, nextFitScale);
     };
 
-    const resizeObserver = new ResizeObserver(() => {
-      window.requestAnimationFrame(fitToContainer);
+    const observer = new ResizeObserver(() => {
+      window.requestAnimationFrame(updateFitScale);
     });
 
-    resizeObserver.observe(container);
+    observer.observe(container);
 
-    window.requestAnimationFrame(fitToContainer);
+    window.requestAnimationFrame(updateFitScale);
 
     return () => {
-      resizeObserver.disconnect();
+      observer.disconnect();
     };
-  }, [pane, paneState.scale, setScale]);
+  }, [pane, basePageWidth, setFitScale]);
 
   useEffect(() => {
     if (!pdf) return;
@@ -135,44 +132,6 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
       initialScrollDoneRef.current = true;
     }
   }, [pdf, paneState.pageNumber]);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const handleNativeWheel = (event: WheelEvent) => {
-      const isZoomGesture = event.ctrlKey || event.metaKey;
-
-      if (!isZoomGesture) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      if (wheelZoomLockRef.current) return;
-
-      wheelZoomLockRef.current = true;
-
-      if (event.deltaY < 0) {
-        zoomIn(pane);
-      } else {
-        zoomOut(pane);
-      }
-
-      window.setTimeout(() => {
-        wheelZoomLockRef.current = false;
-      }, 40);
-    };
-
-    container.addEventListener("wheel", handleNativeWheel, {
-      passive: false,
-    });
-
-    return () => {
-      container.removeEventListener("wheel", handleNativeWheel);
-    };
-  }, [pane, zoomIn, zoomOut]);
 
   const updateDominantVisiblePage = () => {
     const container = containerRef.current;
@@ -223,7 +182,7 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
 
   if (!paneState.pdfUrl) {
     return (
-      <section className="pdf-pane empty-pane">
+      <section className="pdf-pane empty-pane" data-pane-id={pane}>
         <div>PDFが読み込まれていません</div>
       </section>
     );
@@ -231,7 +190,7 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
 
   if (loadError) {
     return (
-      <section className="pdf-pane empty-pane">
+      <section className="pdf-pane empty-pane" data-pane-id={pane}>
         <div>
           <h3>PDF読み込みエラー</h3>
           <pre>{loadError}</pre>
@@ -242,17 +201,24 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
 
   if (!pdf) {
     return (
-      <section className="pdf-pane empty-pane">
+      <section className="pdf-pane empty-pane" data-pane-id={pane}>
         <div>PDFを読み込み中...</div>
       </section>
     );
   }
 
   return (
-    <section ref={containerRef} className="pdf-pane" onScroll={handleScroll}>
+    <section
+      ref={containerRef}
+      className="pdf-pane"
+      data-pane-id={pane}
+      onScroll={handleScroll}
+    >
       <div className="pane-status">
         {pane === "left" ? "左" : "右"} / p.{paneState.pageNumber} /{" "}
-        {paneState.totalPages} / {Math.round(paneState.scale * 100)}%
+        {paneState.totalPages} / 表示 {Math.round(effectiveScale * 100)}%
+        {" / "}
+        手動 {Math.round(paneState.userScale * 100)}%
       </div>
 
       {Array.from({ length: pdf.numPages }, (_, index) => {
@@ -269,7 +235,7 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
             <PdfPage
               pdf={pdf}
               pageNumber={pageNumber}
-              scale={paneState.scale}
+              scale={effectiveScale}
               debugTextLayer={debugTextLayer}
               onTextItems={(page, items) => onTextItems(pane, page, items)}
             />

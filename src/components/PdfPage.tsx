@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { TextLayer } from "./TextLayer";
+import { runOCR } from "../pdf/ocr";
 import type { PdfTextItem } from "../types/pdf";
 
 type PdfPageProps = {
@@ -8,20 +9,23 @@ type PdfPageProps = {
   scale: number;
   debugTextLayer?: boolean;
   onTextItems?: (page: number, items: PdfTextItem[]) => void;
+  onOcrText?: (page: number, text: string) => void;
 };
 
-export function PdfPage({
+function PdfPageComponent({
   pdf,
   pageNumber,
   scale,
   debugTextLayer = false,
   onTextItems,
+  onOcrText,
 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const renderTaskRef = useRef<any>(null);
 
   const [viewport, setViewport] = useState<any>(null);
   const [textContent, setTextContent] = useState<any>(null);
+  const [isOcrRunning, setIsOcrRunning] = useState(false);
 
   useEffect(() => {
     let disposed = false;
@@ -38,11 +42,9 @@ export function PdfPage({
         setTextContent(null);
 
         const canvas = canvasRef.current;
-
         if (!canvas) return;
 
         const ctx = canvas.getContext("2d", { alpha: false });
-
         if (!ctx) return;
 
         if (renderTaskRef.current) {
@@ -97,6 +99,24 @@ export function PdfPage({
         if (disposed) return;
 
         setTextContent(tc);
+
+        if (tc.items.length === 0 && onOcrText) {
+          setIsOcrRunning(true);
+
+          try {
+            const ocrText = await runOCR(canvas);
+
+            if (!disposed) {
+              onOcrText(pageNumber, ocrText);
+            }
+          } catch (error) {
+            console.warn(`[PdfPage ${pageNumber}] OCR failed`, error);
+          } finally {
+            if (!disposed) {
+              setIsOcrRunning(false);
+            }
+          }
+        }
       } catch (error) {
         console.error(`[PdfPage ${pageNumber}] failed`, error);
       }
@@ -115,7 +135,7 @@ export function PdfPage({
         }
       }
     };
-  }, [pdf, pageNumber, scale]);
+  }, [pdf, pageNumber, scale, onOcrText]);
 
   return (
     <div
@@ -155,6 +175,35 @@ export function PdfPage({
           onItems={onTextItems}
         />
       )}
+
+      {isOcrRunning && (
+        <div
+          style={{
+            position: "absolute",
+            right: 8,
+            bottom: 8,
+            zIndex: 20,
+            padding: "4px 8px",
+            borderRadius: 6,
+            background: "rgba(0,0,0,0.75)",
+            color: "white",
+            fontSize: 12,
+          }}
+        >
+          OCR中...
+        </div>
+      )}
     </div>
   );
 }
+
+export const PdfPage = memo(PdfPageComponent, (prev, next) => {
+  return (
+    prev.pdf === next.pdf &&
+    prev.pageNumber === next.pageNumber &&
+    prev.scale === next.scale &&
+    prev.debugTextLayer === next.debugTextLayer &&
+    prev.onTextItems === next.onTextItems &&
+    prev.onOcrText === next.onOcrText
+  );
+});

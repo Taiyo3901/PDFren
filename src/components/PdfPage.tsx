@@ -1,103 +1,158 @@
 import { useEffect, useRef, useState } from "react";
 import { TextLayer } from "./TextLayer";
+import type { PdfTextItem } from "../types/pdf";
 
-type Props = {
+type PdfPageProps = {
   pdf: any;
   pageNumber: number;
   scale: number;
-  onItems: (page: number, items: any[]) => void;
+  debugTextLayer?: boolean;
+  onTextItems?: (page: number, items: PdfTextItem[]) => void;
 };
 
-export function PdfPage({ pdf, pageNumber, scale, onItems }: Props) {
+export function PdfPage({
+  pdf,
+  pageNumber,
+  scale,
+  debugTextLayer = false,
+  onTextItems,
+}: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  const [pageObj, setPageObj] = useState<any>(null);
-  const [viewport, setViewport] = useState<any>(null);
-
-  // ✅ 前のレンダリングをキャンセルするための変数
   const renderTaskRef = useRef<any>(null);
 
+  const [viewport, setViewport] = useState<any>(null);
+  const [textContent, setTextContent] = useState<any>(null);
+
   useEffect(() => {
-    let cancelled = false;
+    let disposed = false;
 
-    const render = async () => {
-      const page = await pdf.getPage(pageNumber);
-      const vp = page.getViewport({ scale });
-
-      setPageObj(page);
-      setViewport(vp);
-
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
-      canvas.width = vp.width;
-      canvas.height = vp.height;
-
-      // ✅ 前の描画をキャンセル
-      if (renderTaskRef.current) {
-        try {
-          renderTaskRef.current.cancel();
-        } catch (e) {}
-      }
-
-      const renderTask = page.render({
-        canvasContext: ctx,
-        viewport: vp,
-      });
-
-      renderTaskRef.current = renderTask;
-
+    async function renderPage() {
       try {
-        await renderTask.promise;
-      } catch (e) {
-        if ((e as any)?.name !== "RenderingCancelledException") {
-          console.error(e);
-        }
-      }
-    };
+        const page = await pdf.getPage(pageNumber);
 
-    render();
+        if (disposed) return;
+
+        const vp = page.getViewport({ scale });
+
+        setViewport(vp);
+        setTextContent(null);
+
+        const canvas = canvasRef.current;
+
+        if (!canvas) return;
+
+        const ctx = canvas.getContext("2d", { alpha: false });
+
+        if (!ctx) return;
+
+        if (renderTaskRef.current) {
+          try {
+            renderTaskRef.current.cancel();
+          } catch {
+            // ignore
+          }
+        }
+
+        const outputScale = window.devicePixelRatio || 1;
+
+        canvas.width = Math.floor(vp.width * outputScale);
+        canvas.height = Math.floor(vp.height * outputScale);
+
+        canvas.style.width = `${Math.floor(vp.width)}px`;
+        canvas.style.height = `${Math.floor(vp.height)}px`;
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const transform =
+          outputScale !== 1
+            ? [outputScale, 0, 0, outputScale, 0, 0]
+            : undefined;
+
+        const renderTask = page.render({
+          canvasContext: ctx,
+          viewport: vp,
+          transform,
+        });
+
+        renderTaskRef.current = renderTask;
+
+        try {
+          await renderTask.promise;
+        } catch (error: any) {
+          if (error?.name !== "RenderingCancelledException") {
+            console.error(`[PdfPage ${pageNumber}] render error`, error);
+          }
+
+          return;
+        }
+
+        if (disposed) return;
+
+        const tc = await page.getTextContent({
+          disableCombineTextItems: false,
+          includeMarkedContent: false,
+        } as any);
+
+        if (disposed) return;
+
+        setTextContent(tc);
+      } catch (error) {
+        console.error(`[PdfPage ${pageNumber}] failed`, error);
+      }
+    }
+
+    void renderPage();
 
     return () => {
-      cancelled = true;
+      disposed = true;
 
       if (renderTaskRef.current) {
         try {
           renderTaskRef.current.cancel();
-        } catch (e) {}
+        } catch {
+          // ignore
+        }
       }
     };
   }, [pdf, pageNumber, scale]);
 
   return (
     <div
+      className="pdf-page"
+      data-page={pageNumber}
       style={{
         position: "relative",
-        width: viewport?.width,
-        height: viewport?.height,
+        width: viewport ? `${viewport.width}px` : "0px",
+        height: viewport ? `${viewport.height}px` : "0px",
+        margin: "16px auto",
+        background: "white",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+        userSelect: "none",
+        WebkitUserSelect: "none",
       }}
-      data-page={pageNumber}
     >
       <canvas
         ref={canvasRef}
+        className="pdf-canvas"
         style={{
           position: "absolute",
-          top: 0,
-          left: 0,
+          inset: 0,
           zIndex: 1,
+          display: "block",
           pointerEvents: "none",
+          userSelect: "none",
+          WebkitUserSelect: "none",
         }}
       />
 
-      {pageObj && viewport && (
+      {viewport && textContent && textContent.items.length > 0 && (
         <TextLayer
-          page={pageObj}
+          textContent={textContent}
           viewport={viewport}
-          scale={scale}
-          onItems={(items) => onItems(pageNumber, items)}
+          pageNumber={pageNumber}
+          debug={debugTextLayer}
+          onItems={onTextItems}
         />
       )}
     </div>

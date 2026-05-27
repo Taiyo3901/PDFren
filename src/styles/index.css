@@ -1,0 +1,215 @@
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: #111;
+  color: white;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app-layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  height: 100vh;
+  overflow-y: auto;
+  background: #181818;
+  border-right: 1px solid #333;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.sidebar h1 {
+  margin: 0 0 16px;
+  font-size: 20px;
+}
+
+.sidebar-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.sidebar-tabs button {
+  padding: 8px;
+  border: 1px solid #444;
+  background: #222;
+  color: white;
+  border-radius: 8px;
+}
+
+.sidebar-tabs button.active {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.sidebar-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pane-controls,
+.formula-list {
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 12px;
+  background: #202020;
+}
+
+.pane-controls h2,
+.formula-list h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.file-name {
+  font-size: 12px;
+  opacity: 0.75;
+  word-break: break-all;
+  margin-bottom: 8px;
+}
+
+.file-button {
+  display: block;
+  padding: 8px;
+  margin-bottom: 8px;
+  text-align: center;
+  background: #333;
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.file-button input {
+  display: none;
+}
+
+.control-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.control-row input {
+  width: 72px;
+}
+
+.split-view {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  height: 100vh;
+  overflow: hidden;
+  background: #333;
+}
+
+.pdf-pane {
+  overflow: auto;
+  background: #111;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.empty-pane {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #aaa;
+}
+
+.page-bottom-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0 24px;
+}
+
+.pdf-page,
+.pdf-canvas {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pdf-text-layer {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pdf-text-layer span {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.pdf-text-layer span::selection {
+  background: rgba(0, 120, 255, 0.35);
+}
+
+.formula-card {
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 10px;
+  margin-top: 10px;
+  background: #111;
+}
+
+.formula-meta {
+  font-size: 12px;
+  opacity: 0.65;
+  margin-bottom: 6px;
+}
+
+.formula-raw {
+  font-size: 13px;
+  margin-bottom: 6px;
+  word-break: break-all;
+}
+
+.formula-latex {
+  margin: 0 0 8px;
+  padding: 8px;
+  background: #222;
+  border-radius: 6px;
+  color: #dbeafe;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.empty-message {
+  font-size: 13px;
+  opacity: 0.65;
+}
+
+.copied {
+  font-size: 13px;
+  color: #86efac;
+}
+
+.error-screen {
+  min-height: 100vh;
+  background: #111;
+  color: white;
+  padding: 24px;
+}
+
+.error-screen pre {
+  white-space: pre-wrap;
+  background: #222;
+  padding: 16px;
+  border-radius: 8px;
+}

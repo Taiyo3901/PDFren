@@ -1,28 +1,54 @@
+/// <reference types="chrome" />
+
+/**
+ * @param {string | undefined} url
+ * @returns {boolean}
+ */
 const isPdfUrl = (url) => {
   if (!url) return false;
 
-  return (
-    url.endsWith(".pdf") ||
-    url.includes(".pdf?") ||
-    url.startsWith("file:")
-  );
+  try {
+    const parsed = new URL(url);
+
+    if (parsed.protocol === "chrome-extension:") {
+      return false;
+    }
+
+    if (
+      parsed.protocol === "file:" &&
+      parsed.pathname.toLowerCase().endsWith(".pdf")
+    ) {
+      return true;
+    }
+
+    if (parsed.pathname.toLowerCase().endsWith(".pdf")) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
 };
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+/**
+ * @param {number} tabId
+ * @param {chrome.tabs.TabChangeInfo} changeInfo
+ * @param {chrome.tabs.Tab} tab
+ */
+const handleTabUpdated = (tabId, changeInfo, tab) => {
   if (changeInfo.status !== "loading") return;
   if (!tab.url) return;
 
-  // ✅ これが超重要（無限ループ防止）
-  if (tab.url.includes("chrome-extension://")) return;
+  if (!isPdfUrl(tab.url)) return;
 
-  // ✅ すでにviewerなら無視
-  if (tab.url.includes("index.html?pdf=")) return;
+  const viewerUrl = chrome.runtime.getURL(
+    `index.html?pdf=${encodeURIComponent(tab.url)}`
+  );
 
-  if (isPdfUrl(tab.url)) {
-    const viewerUrl = chrome.runtime.getURL(
-      `index.html?pdf=${encodeURIComponent(tab.url)}`
-    );
+  void chrome.tabs.update(tabId, {
+    url: viewerUrl,
+  });
+};
 
-    chrome.tabs.update(tabId, { url: viewerUrl });
-  }
-});
+chrome.tabs.onUpdated.addListener(handleTabUpdated);

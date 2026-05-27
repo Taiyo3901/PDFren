@@ -1,80 +1,152 @@
 import { useEffect, useRef } from "react";
 import { pdfjsLib } from "../lib/pdfjs";
+import type { PdfTextItem } from "../types/pdf";
 
-type Props = {
-  page: any;
+type TextLayerProps = {
+  textContent: any;
   viewport: any;
-  scale: number;
-  onItems: (items: any[]) => void;
+  pageNumber: number;
+  debug?: boolean;
+  onItems?: (page: number, items: PdfTextItem[]) => void;
 };
 
-export function TextLayer({ page, viewport, scale, onItems }: Props) {
-  const ref = useRef<HTMLDivElement>(null);
+type PositionedTextItem = {
+  str: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export function TextLayer({
+  textContent,
+  viewport,
+  pageNumber,
+  debug = false,
+  onItems,
+}: TextLayerProps) {
+  const layerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const render = async () => {
-      const textContent = await page.getTextContent();
-      const container = ref.current!;
-      container.innerHTML = "";
+    const container = layerRef.current;
 
-      const items: any[] = [];
+    if (!container || !textContent || !viewport) return;
 
-      for (const item of textContent.items as any[]) {
+    container.innerHTML = "";
+
+    const rawItems = textContent.items as any[];
+
+    const positionedItems: PositionedTextItem[] = rawItems
+      .filter((item) => {
+        return typeof item.str === "string" && item.str.trim().length > 0;
+      })
+      .map((item) => {
         const tx = pdfjsLib.Util.transform(
           viewport.transform,
           item.transform
         );
 
         const x = tx[4];
-        const y = tx[5];
-        const height = Math.hypot(tx[2], tx[3]);
-        const width = item.width * scale;
+        const baselineY = tx[5];
 
-        const span = document.createElement("span");
+        const height =
+          Math.hypot(tx[2], tx[3]) ||
+          Math.abs((item.height ?? 10) * viewport.scale) ||
+          10;
 
-        span.textContent = item.str;
+        const width =
+          Math.abs((item.width ?? 0) * viewport.scale) ||
+          Math.max(item.str.length * height * 0.5, 1);
 
-        span.style.position = "absolute";
-        span.style.left = `${x}px`;
-        span.style.top = `${y - height}px`;
-        span.style.fontSize = `${height}px`;
-        span.style.width = `${width}px`;
-        span.style.height = `${height}px`;
-
-        span.style.whiteSpace = "pre";
-
-        // ✅ これが超重要（コピーできるか決まる）
-        span.style.color = "rgba(0,0,0,0)";
-        span.style.userSelect = "text";
-        span.style.pointerEvents = "auto";
-
-        container.appendChild(span);
-
-        items.push({
+        return {
           str: item.str,
           x,
-          y,
+          y: baselineY - height,
           width,
-          height
-        });
+          height,
+        };
+      })
+      .sort((a, b) => {
+        const yDiff = a.y - b.y;
+
+        if (Math.abs(yDiff) > 3) {
+          return yDiff;
+        }
+
+        return a.x - b.x;
+      });
+
+    const exportedItems: PdfTextItem[] = positionedItems.map((item) => ({
+      ...item,
+      page: pageNumber,
+    }));
+
+    for (const item of positionedItems) {
+      const span = document.createElement("span");
+
+      span.textContent = item.str;
+      span.dataset.pdfText = "true";
+
+      span.style.position = "absolute";
+      span.style.left = `${item.x}px`;
+      span.style.top = `${item.y}px`;
+      span.style.width = `${item.width}px`;
+      span.style.height = `${item.height}px`;
+
+      span.style.fontSize = `${item.height}px`;
+      span.style.lineHeight = "1";
+      span.style.whiteSpace = "pre";
+      span.style.overflow = "hidden";
+      span.style.display = "block";
+      span.style.transformOrigin = "0 0";
+
+      span.style.userSelect = "text";
+      span.style.webkitUserSelect = "text";
+      span.style.pointerEvents = "auto";
+      span.style.cursor = "text";
+
+      if (debug) {
+        span.style.color = "red";
+        span.style.background = "rgba(255,0,0,0.15)";
+        span.style.outline = "1px solid rgba(255,0,0,0.4)";
+      } else {
+        span.style.color = "transparent";
+        span.style.background = "transparent";
       }
 
-      onItems(items);
-    };
+      container.appendChild(span);
+    }
 
-    render();
-  }, [page, viewport, scale, onItems]);
+    onItems?.(pageNumber, exportedItems);
+  }, [textContent, viewport, pageNumber, debug, onItems]);
+
+  const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) {
+      event.preventDefault();
+
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+    }
+  };
 
   return (
     <div
-      ref={ref}
+      ref={layerRef}
+      className="pdf-text-layer"
+      onMouseDown={handleMouseDown}
       style={{
         position: "absolute",
-        top: 0,
-        left: 0,
-        width: viewport?.width,
-        height: viewport?.height,
-        zIndex: 10 // ✅ canvasより上
+        inset: 0,
+        width: `${viewport.width}px`,
+        height: `${viewport.height}px`,
+        overflow: "hidden",
+        zIndex: 10,
+
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        pointerEvents: "auto",
+
+        border: debug ? "1px solid red" : "none",
       }}
     />
   );

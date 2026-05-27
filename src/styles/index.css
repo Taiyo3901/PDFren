@@ -18,8 +18,15 @@ button {
 
 .app-layout {
   display: grid;
-  grid-template-columns: 340px 1fr;
   min-height: 100vh;
+}
+
+.app-layout.sidebar-expanded {
+  grid-template-columns: 340px 1fr;
+}
+
+.app-layout.sidebar-collapsed {
+  grid-template-columns: 44px 1fr;
 }
 
 .sidebar {
@@ -31,9 +38,30 @@ button {
   box-sizing: border-box;
 }
 
+.sidebar-mini {
+  padding: 8px;
+  display: flex;
+  justify-content: center;
+}
+
+.sidebar-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .sidebar h1 {
   margin: 0 0 16px;
   font-size: 20px;
+}
+
+.sidebar-toggle {
+  border: 1px solid #444;
+  background: #222;
+  color: white;
+  border-radius: 8px;
+  padding: 6px 8px;
 }
 
 .sidebar-tabs {
@@ -59,21 +87,31 @@ button {
 .sidebar-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
-.pane-controls,
-.formula-list {
+.collapsible-section {
   border: 1px solid #333;
   border-radius: 12px;
-  padding: 12px;
   background: #202020;
+  overflow: hidden;
 }
 
-.pane-controls h2,
-.formula-list h2 {
-  margin: 0 0 8px;
-  font-size: 16px;
+.collapsible-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: #252525;
+  color: white;
+  border: none;
+  border-bottom: 1px solid #333;
+  text-align: left;
+}
+
+.collapsible-body {
+  padding: 12px;
 }
 
 .file-name {
@@ -105,17 +143,53 @@ button {
   margin-top: 8px;
 }
 
-.control-row input {
-  width: 72px;
+.page-info {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #ddd;
 }
 
-.split-view {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1px;
+.hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #999;
+}
+
+.viewer-area {
   height: 100vh;
   overflow: hidden;
+  background: #111;
+}
+
+.viewer-area.single-mode {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.viewer-area.split-mode {
+  display: grid;
   background: #333;
+}
+
+.split-divider {
+  background: #333;
+  cursor: col-resize;
+  position: relative;
+  touch-action: none;
+}
+
+.split-divider::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #666;
+}
+
+.split-divider:hover::before {
+  background: #60a5fa;
 }
 
 .pdf-pane {
@@ -123,6 +197,18 @@ button {
   background: #111;
   padding: 16px;
   box-sizing: border-box;
+  position: relative;
+  overscroll-behavior: contain;
+}
+
+.viewer-area.single-mode .pdf-pane {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.viewer-area.split-mode .pdf-pane {
+  display: block;
 }
 
 .empty-pane {
@@ -132,12 +218,27 @@ button {
   color: #aaa;
 }
 
-.page-bottom-controls {
+.no-pdf-message {
   display: flex;
-  justify-content: center;
   align-items: center;
-  gap: 12px;
-  margin: 8px 0 24px;
+  justify-content: center;
+  height: 100%;
+  color: #aaa;
+  font-size: 18px;
+}
+
+.pane-status {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  background: rgba(20, 20, 20, 0.9);
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #ddd;
+  font-size: 12px;
+  width: fit-content;
 }
 
 .pdf-page,
@@ -160,11 +261,16 @@ button {
   background: rgba(0, 120, 255, 0.35);
 }
 
+.formula-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .formula-card {
   border: 1px solid #333;
   border-radius: 10px;
   padding: 10px;
-  margin-top: 10px;
   background: #111;
 }
 

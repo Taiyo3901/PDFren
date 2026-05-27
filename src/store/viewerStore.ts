@@ -22,8 +22,11 @@ type ViewerState = {
   zoomOut: (pane: PaneId) => void;
   setScale: (pane: PaneId, scale: number) => void;
 
-  mirrorLeftToRight: () => void;
+  openLeftPdfOnRightDifferentPage: () => void;
 };
+
+const MIN_SCALE = 0.35;
+const MAX_SCALE = 3;
 
 const initialPaneState: PaneState = {
   pdfUrl: null,
@@ -32,6 +35,10 @@ const initialPaneState: PaneState = {
   totalPages: 0,
   scale: 1.2,
 };
+
+function clampScale(scale: number): number {
+  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, Number(scale.toFixed(2))));
+}
 
 export const useViewerStore = create<ViewerState>((set) => ({
   panes: {
@@ -64,10 +71,15 @@ export const useViewerStore = create<ViewerState>((set) => ({
   setPageNumber: (pane, pageNumber) =>
     set((state) => {
       const current = state.panes[pane];
+
       const safePage =
         current.totalPages > 0
           ? Math.min(Math.max(1, pageNumber), current.totalPages)
           : Math.max(1, pageNumber);
+
+      if (current.pageNumber === safePage) {
+        return state;
+      }
 
       return {
         panes: {
@@ -81,64 +93,86 @@ export const useViewerStore = create<ViewerState>((set) => ({
     }),
 
   setTotalPages: (pane, totalPages) =>
-    set((state) => ({
-      panes: {
-        ...state.panes,
-        [pane]: {
-          ...state.panes[pane],
-          totalPages,
-          pageNumber: Math.min(
-            Math.max(1, state.panes[pane].pageNumber),
-            Math.max(1, totalPages)
-          ),
+    set((state) => {
+      const current = state.panes[pane];
+
+      return {
+        panes: {
+          ...state.panes,
+          [pane]: {
+            ...current,
+            totalPages,
+            pageNumber: Math.min(
+              Math.max(1, current.pageNumber),
+              Math.max(1, totalPages)
+            ),
+          },
         },
-      },
-    })),
+      };
+    }),
 
   zoomIn: (pane) =>
-    set((state) => ({
-      panes: {
-        ...state.panes,
-        [pane]: {
-          ...state.panes[pane],
-          scale: Math.min(
-            3,
-            Number((state.panes[pane].scale + 0.15).toFixed(2))
-          ),
+    set((state) => {
+      const current = state.panes[pane];
+
+      return {
+        panes: {
+          ...state.panes,
+          [pane]: {
+            ...current,
+            scale: clampScale(current.scale + 0.15),
+          },
         },
-      },
-    })),
+      };
+    }),
 
   zoomOut: (pane) =>
-    set((state) => ({
-      panes: {
-        ...state.panes,
-        [pane]: {
-          ...state.panes[pane],
-          scale: Math.max(
-            0.5,
-            Number((state.panes[pane].scale - 0.15).toFixed(2))
-          ),
+    set((state) => {
+      const current = state.panes[pane];
+
+      return {
+        panes: {
+          ...state.panes,
+          [pane]: {
+            ...current,
+            scale: clampScale(current.scale - 0.15),
+          },
         },
-      },
-    })),
+      };
+    }),
 
   setScale: (pane, scale) =>
-    set((state) => ({
-      panes: {
-        ...state.panes,
-        [pane]: {
-          ...state.panes[pane],
-          scale: Math.min(3, Math.max(0.5, scale)),
-        },
-      },
-    })),
+    set((state) => {
+      const current = state.panes[pane];
+      const nextScale = clampScale(scale);
 
-  mirrorLeftToRight: () =>
+      if (current.scale === nextScale) {
+        return state;
+      }
+
+      return {
+        panes: {
+          ...state.panes,
+          [pane]: {
+            ...current,
+            scale: nextScale,
+          },
+        },
+      };
+    }),
+
+  openLeftPdfOnRightDifferentPage: () =>
     set((state) => {
       const left = state.panes.left;
 
-      if (!left.pdfUrl) return state;
+      if (!left.pdfUrl) {
+        return state;
+      }
+
+      const preferredPage = Math.min(
+        left.pageNumber + 1,
+        Math.max(1, left.totalPages || left.pageNumber + 1)
+      );
 
       return {
         panes: {
@@ -147,7 +181,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
             ...state.panes.right,
             pdfUrl: left.pdfUrl,
             title: `${left.title} / 別ページ`,
-            pageNumber: Math.min(left.pageNumber + 1, Math.max(1, left.totalPages)),
+            pageNumber: preferredPage,
             totalPages: left.totalPages,
             scale: left.scale,
           },

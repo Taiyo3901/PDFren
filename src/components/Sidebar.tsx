@@ -7,6 +7,8 @@ import { useViewerStore } from "../store/viewerStore";
 type SidebarProps = {
   formulas: FormulaCandidate[];
   debugTextLayer: boolean;
+  collapsed: boolean;
+  onToggleSidebar: () => void;
   onToggleDebugTextLayer: () => void;
 };
 
@@ -15,18 +17,26 @@ type SidebarTab = "controls" | "latex";
 export function Sidebar({
   formulas,
   debugTextLayer,
+  collapsed,
+  onToggleSidebar,
   onToggleDebugTextLayer,
 }: SidebarProps) {
   const [tab, setTab] = useState<SidebarTab>("controls");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const [isLeftControlsOpen, setIsLeftControlsOpen] = useState(true);
+  const [isRightControlsOpen, setIsRightControlsOpen] = useState(true);
+  const [isLatexLeftOpen, setIsLatexLeftOpen] = useState(true);
+  const [isLatexRightOpen, setIsLatexRightOpen] = useState(true);
+
   const panes = useViewerStore((state) => state.panes);
   const loadPdf = useViewerStore((state) => state.loadPdf);
   const clearPdf = useViewerStore((state) => state.clearPdf);
-  const setPageNumber = useViewerStore((state) => state.setPageNumber);
   const zoomIn = useViewerStore((state) => state.zoomIn);
   const zoomOut = useViewerStore((state) => state.zoomOut);
-  const mirrorLeftToRight = useViewerStore((state) => state.mirrorLeftToRight);
+  const openLeftPdfOnRightDifferentPage = useViewerStore(
+    (state) => state.openLeftPdfOnRightDifferentPage
+  );
 
   const formulasByPane = useMemo(() => {
     return {
@@ -35,7 +45,10 @@ export function Sidebar({
     };
   }, [formulas]);
 
-  const handleFileChange = (pane: PaneId, event: ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (
+    pane: PaneId,
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
     const file = event.target.files?.[0];
 
     if (!file) return;
@@ -62,12 +75,30 @@ export function Sidebar({
 
     await copyLatexToClipboard(text);
     setCopiedId("all");
-    window.setTimeout(() => setCopiedId(null), 1200);
+
+    window.setTimeout(() => {
+      setCopiedId(null);
+    }, 1200);
   };
+
+  if (collapsed) {
+    return (
+      <aside className="sidebar sidebar-mini">
+        <button className="sidebar-toggle" onClick={onToggleSidebar}>
+          ▶
+        </button>
+      </aside>
+    );
+  }
 
   return (
     <aside className="sidebar">
-      <h1>Paper PDF Analyzer</h1>
+      <div className="sidebar-title-row">
+        <h1>Paper PDF Analyzer</h1>
+        <button className="sidebar-toggle" onClick={onToggleSidebar}>
+          ◀
+        </button>
+      </div>
 
       <div className="sidebar-tabs">
         <button
@@ -87,110 +118,139 @@ export function Sidebar({
 
       {tab === "controls" && (
         <div className="sidebar-content">
-          <button onClick={mirrorLeftToRight}>
-            左PDFを右にも開く
+          <button onClick={openLeftPdfOnRightDifferentPage}>
+            左PDFの別ページを右に開く
           </button>
 
           <button onClick={onToggleDebugTextLayer}>
             TextLayer Debug: {debugTextLayer ? "ON" : "OFF"}
           </button>
 
-          <PaneControls
-            pane="left"
-            title="左ペイン"
-            fileName={panes.left.title}
-            pageNumber={panes.left.pageNumber}
-            totalPages={panes.left.totalPages}
-            scale={panes.left.scale}
-            onFileChange={handleFileChange}
-            onClear={clearPdf}
-            onPrev={() => setPageNumber("left", panes.left.pageNumber - 1)}
-            onNext={() => setPageNumber("left", panes.left.pageNumber + 1)}
-            onZoomIn={() => zoomIn("left")}
-            onZoomOut={() => zoomOut("left")}
-            onPageInput={(value) => setPageNumber("left", value)}
-          />
+          <CollapsibleSection
+            title="左ペイン操作"
+            open={isLeftControlsOpen}
+            onToggle={() => setIsLeftControlsOpen((value) => !value)}
+          >
+            <PaneControls
+              pane="left"
+              fileName={panes.left.title}
+              pageNumber={panes.left.pageNumber}
+              totalPages={panes.left.totalPages}
+              scale={panes.left.scale}
+              onFileChange={handleFileChange}
+              onClear={clearPdf}
+              onZoomIn={() => zoomIn("left")}
+              onZoomOut={() => zoomOut("left")}
+            />
+          </CollapsibleSection>
 
-          <PaneControls
-            pane="right"
-            title="右ペイン"
-            fileName={panes.right.title}
-            pageNumber={panes.right.pageNumber}
-            totalPages={panes.right.totalPages}
-            scale={panes.right.scale}
-            onFileChange={handleFileChange}
-            onClear={clearPdf}
-            onPrev={() => setPageNumber("right", panes.right.pageNumber - 1)}
-            onNext={() => setPageNumber("right", panes.right.pageNumber + 1)}
-            onZoomIn={() => zoomIn("right")}
-            onZoomOut={() => zoomOut("right")}
-            onPageInput={(value) => setPageNumber("right", value)}
-          />
+          <CollapsibleSection
+            title="右ペイン操作"
+            open={isRightControlsOpen}
+            onToggle={() => setIsRightControlsOpen((value) => !value)}
+          >
+            <PaneControls
+              pane="right"
+              fileName={panes.right.title}
+              pageNumber={panes.right.pageNumber}
+              totalPages={panes.right.totalPages}
+              scale={panes.right.scale}
+              onFileChange={handleFileChange}
+              onClear={clearPdf}
+              onZoomIn={() => zoomIn("right")}
+              onZoomOut={() => zoomOut("right")}
+            />
+          </CollapsibleSection>
         </div>
       )}
 
       {tab === "latex" && (
         <div className="sidebar-content">
           <button onClick={copyAllCurrentPage} disabled={formulas.length === 0}>
-            この表示中ページのLaTeXを全部コピー
+            表示中ページのLaTeXを全部コピー
           </button>
 
           {copiedId === "all" && <div className="copied">コピーしました</div>}
 
-          <FormulaList
-            title="左ペイン"
-            formulas={formulasByPane.left}
-            copiedId={copiedId}
-            onCopy={copyOne}
-          />
+          <CollapsibleSection
+            title={`左ペイン LaTeX (${formulasByPane.left.length})`}
+            open={isLatexLeftOpen}
+            onToggle={() => setIsLatexLeftOpen((value) => !value)}
+          >
+            <FormulaList
+              formulas={formulasByPane.left}
+              copiedId={copiedId}
+              onCopy={copyOne}
+            />
+          </CollapsibleSection>
 
-          <FormulaList
-            title="右ペイン"
-            formulas={formulasByPane.right}
-            copiedId={copiedId}
-            onCopy={copyOne}
-          />
+          <CollapsibleSection
+            title={`右ペイン LaTeX (${formulasByPane.right.length})`}
+            open={isLatexRightOpen}
+            onToggle={() => setIsLatexRightOpen((value) => !value)}
+          >
+            <FormulaList
+              formulas={formulasByPane.right}
+              copiedId={copiedId}
+              onCopy={copyOne}
+            />
+          </CollapsibleSection>
         </div>
       )}
     </aside>
   );
 }
 
+type CollapsibleSectionProps = {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+};
+
+function CollapsibleSection({
+  title,
+  open,
+  onToggle,
+  children,
+}: CollapsibleSectionProps) {
+  return (
+    <section className="collapsible-section">
+      <button className="collapsible-header" onClick={onToggle}>
+        <span>{open ? "▼" : "▶"}</span>
+        <span>{title}</span>
+      </button>
+
+      {open && <div className="collapsible-body">{children}</div>}
+    </section>
+  );
+}
+
 type PaneControlsProps = {
   pane: PaneId;
-  title: string;
   fileName: string;
   pageNumber: number;
   totalPages: number;
   scale: number;
   onFileChange: (pane: PaneId, event: ChangeEvent<HTMLInputElement>) => void;
   onClear: (pane: PaneId) => void;
-  onPrev: () => void;
-  onNext: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
-  onPageInput: (page: number) => void;
 };
 
 function PaneControls({
   pane,
-  title,
   fileName,
   pageNumber,
   totalPages,
   scale,
   onFileChange,
   onClear,
-  onPrev,
-  onNext,
   onZoomIn,
   onZoomOut,
-  onPageInput,
 }: PaneControlsProps) {
   return (
-    <section className="pane-controls">
-      <h2>{title}</h2>
-
+    <div className="pane-controls-inner">
       <div className="file-name">{fileName}</div>
 
       <label className="file-button">
@@ -210,42 +270,26 @@ function PaneControls({
         <button onClick={onZoomIn}>+</button>
       </div>
 
-      <div className="control-row">
-        <button onClick={onPrev}>前</button>
-
-        <input
-          type="number"
-          min={1}
-          max={Math.max(1, totalPages)}
-          value={pageNumber}
-          onChange={(event) => onPageInput(Number(event.target.value))}
-        />
-
-        <span>/ {totalPages || "-"}</span>
-
-        <button onClick={onNext}>次</button>
+      <div className="page-info">
+        現在ページ: {pageNumber} / {totalPages || "-"}
       </div>
-    </section>
+
+      <div className="hint">
+        通常スクロール: ページ移動 / Ctrl+wheel: PDFズーム
+      </div>
+    </div>
   );
 }
 
 type FormulaListProps = {
-  title: string;
   formulas: FormulaCandidate[];
   copiedId: string | null;
   onCopy: (formula: FormulaCandidate) => void;
 };
 
-function FormulaList({
-  title,
-  formulas,
-  copiedId,
-  onCopy,
-}: FormulaListProps) {
+function FormulaList({ formulas, copiedId, onCopy }: FormulaListProps) {
   return (
-    <section className="formula-list">
-      <h2>{title}</h2>
-
+    <div className="formula-list">
       {formulas.length === 0 && (
         <div className="empty-message">数式候補なし</div>
       )}
@@ -265,6 +309,6 @@ function FormulaList({
           </button>
         </div>
       ))}
-    </section>
+    </div>
   );
 }

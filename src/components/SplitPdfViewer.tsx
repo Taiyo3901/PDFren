@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { PdfPane } from "./PdfPane";
 import { useViewerStore } from "../store/viewerStore";
@@ -11,7 +11,12 @@ export function SplitPdfViewer() {
   const loadPdf = useViewerStore((state) => state.loadPdf);
   const panes = useViewerStore((state) => state.panes);
 
+  const viewerAreaRef = useRef<HTMLElement | null>(null);
+
   const [debugTextLayer, setDebugTextLayer] = useState(false);
+  const [splitRatio, setSplitRatio] = useState(50);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
   const [textItemsByPane, setTextItemsByPane] = useState<TextItemsByPane>({
     left: [],
     right: [],
@@ -40,49 +45,144 @@ export function SplitPdfViewer() {
     []
   );
 
-  const formulas = useMemo<FormulaCandidate[]>(() => {
-    const leftPage = panes.left.pageNumber;
-    const rightPage = panes.right.pageNumber;
+  const hasLeftPdf = Boolean(panes.left.pdfUrl);
+  const hasRightPdf = Boolean(panes.right.pdfUrl);
 
-    return [
-      ...extractFormulaCandidates(
-        "left",
-        leftPage,
-        textItemsByPane.left
-      ),
-      ...extractFormulaCandidates(
-        "right",
-        rightPage,
-        textItemsByPane.right
-      ),
-    ];
+  const isSplitMode = hasLeftPdf && hasRightPdf;
+
+  const visiblePanes: PaneId[] = useMemo(() => {
+    if (hasLeftPdf && hasRightPdf) return ["left", "right"];
+    if (hasLeftPdf) return ["left"];
+    if (hasRightPdf) return ["right"];
+    return [];
+  }, [hasLeftPdf, hasRightPdf]);
+
+  const formulas = useMemo<FormulaCandidate[]>(() => {
+    const result: FormulaCandidate[] = [];
+
+    if (hasLeftPdf) {
+      result.push(
+        ...extractFormulaCandidates(
+          "left",
+          panes.left.pageNumber,
+          textItemsByPane.left
+        )
+      );
+    }
+
+    if (hasRightPdf) {
+      result.push(
+        ...extractFormulaCandidates(
+          "right",
+          panes.right.pageNumber,
+          textItemsByPane.right
+        )
+      );
+    }
+
+    return result;
   }, [
+    hasLeftPdf,
+    hasRightPdf,
     panes.left.pageNumber,
     panes.right.pageNumber,
     textItemsByPane.left,
     textItemsByPane.right,
   ]);
 
+  const handleDividerPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>
+  ) => {
+    event.preventDefault();
+
+    const viewerArea = viewerAreaRef.current;
+    if (!viewerArea) return;
+
+    const rect = viewerArea.getBoundingClientRect();
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const x = moveEvent.clientX - rect.left;
+      const ratio = (x / rect.width) * 100;
+
+      const clamped = Math.min(78, Math.max(22, ratio));
+      setSplitRatio(Number(clamped.toFixed(1)));
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  };
+
   return (
-    <div className="app-layout">
+    <div
+      className={
+        isSidebarCollapsed
+          ? "app-layout sidebar-collapsed"
+          : "app-layout sidebar-expanded"
+      }
+    >
       <Sidebar
         formulas={formulas}
         debugTextLayer={debugTextLayer}
+        collapsed={isSidebarCollapsed}
+        onToggleSidebar={() => setIsSidebarCollapsed((value) => !value)}
         onToggleDebugTextLayer={() => setDebugTextLayer((value) => !value)}
       />
 
-      <main className="split-view">
-        <PdfPane
-          pane="left"
-          debugTextLayer={debugTextLayer}
-          onTextItems={handleTextItems}
-        />
+      <main
+        ref={viewerAreaRef}
+        className={
+          isSplitMode ? "viewer-area split-mode" : "viewer-area single-mode"
+        }
+        style={
+          isSplitMode
+            ? {
+                gridTemplateColumns: `${splitRatio}fr 8px ${
+                  100 - splitRatio
+                }fr`,
+              }
+            : undefined
+        }
+      >
+        {visiblePanes.length === 0 && (
+          <div className="no-pdf-message">PDFを読み込んでください</div>
+        )}
 
-        <PdfPane
-          pane="right"
-          debugTextLayer={debugTextLayer}
-          onTextItems={handleTextItems}
-        />
+        {!isSplitMode &&
+          visiblePanes.map((pane) => (
+            <PdfPane
+              key={pane}
+              pane={pane}
+              debugTextLayer={debugTextLayer}
+              onTextItems={handleTextItems}
+            />
+          ))}
+
+        {isSplitMode && (
+          <>
+            <PdfPane
+              pane="left"
+              debugTextLayer={debugTextLayer}
+              onTextItems={handleTextItems}
+            />
+
+            <div
+              className="split-divider"
+              onPointerDown={handleDividerPointerDown}
+              title="ドラッグして表示幅を調整"
+            />
+
+            <PdfPane
+              pane="right"
+              debugTextLayer={debugTextLayer}
+              onTextItems={handleTextItems}
+            />
+          </>
+        )}
       </main>
     </div>
   );

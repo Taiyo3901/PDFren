@@ -20,9 +20,10 @@
 - Linux
 - PC版Google Chrome
 - Chrome拡張機能が利用できるブラウザ環境
-## 実装方法
 
 ---
+
+## 実装方法
 
 1.Releaseブランチからzipファイルをダウンロード
 

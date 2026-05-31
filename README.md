@@ -1,7 +1,25 @@
-# ソースコードの実際の動かし方
+# "PDFren"でもっと豊かに!!
+このプログラムは普段PDFを開く際の不満から作り上げた、Chrome拡張機能となっています。​
+## 主な機能
+・指定したページのジャンプ機能​
 
-ダウンロード後「chrome://extensions/」でChromeを開き、右上にあるデベロッパーモードONにしてパッケージ化されていない拡張機能を読み込むをクリック。そしてこのフォルダーのdistフォルダーを選択。
-これで、PDFをChromeで開けば、自作のViewerへ開ける。
+・文字選択とコピー​
+
+・左右独立した2画面表示​
+
+・PDF内の数式をLaTex形式でコピー
+## 実行環境
+・Google Chrome
+
+・Chrome拡張機能が使える端末、主にPC
+## 実装方法
+1.Releaseブランチからzipファイルをダウンロード
+
+2.Chromeを起動させ、Chromeの拡張機能ページ(chrome://extensions/)を開く
+
+3.右上にあるデベロッパーモードONにしてパッケージ化されていない拡張機能を読み込むをクリック
+
+4.ダウンロードしたzipファイルを解凍し、フォルダー内のpaper-viewer-v1.0という名前のフォルダーを選択
 
 # 開発の進め方
 (Node.js,Gitをダウンロードしてなかったらする必要がある)
@@ -65,80 +83,3 @@ distフォルダ選択
 
 8. テスト
 適当なPDFファイルを開く
-
-
-
-
-# React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```

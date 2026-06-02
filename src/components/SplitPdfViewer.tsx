@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { PdfPane } from "./PdfPane";
 import { useViewerStore } from "../store/viewerStore";
-import type { FormulaCandidate, PaneId, PdfTextItem } from "../types/pdf";
+import type { FormulaCandidate, OutlineItem, PaneId, PdfTextItem } from "../types/pdf";
 import { extractFormulaCandidates } from "../pdf/formula";
+import { extractOutlineItems } from "../pdf/outline";
 
 type TextItemsByPane = Record<PaneId, PdfTextItem[]>;
 
@@ -46,34 +47,23 @@ export function SplitPdfViewer() {
     const handleWheel = (event: WheelEvent) => {
       const isZoomGesture = event.ctrlKey || event.metaKey;
 
-      if (!isZoomGesture) {
-        return;
-      }
+      if (!isZoomGesture) return;
 
       event.preventDefault();
       event.stopPropagation();
 
       const target = event.target;
 
-      if (!(target instanceof Element)) {
-        return;
-      }
+      if (!(target instanceof Element)) return;
 
       const paneElement = target.closest("[data-pane-id]");
-
-      if (!paneElement) {
-        return;
-      }
+      if (!paneElement) return;
 
       const paneId = paneElement.getAttribute("data-pane-id");
 
-      if (paneId !== "left" && paneId !== "right") {
-        return;
-      }
+      if (paneId !== "left" && paneId !== "right") return;
 
-      if (wheelLockRef.current) {
-        return;
-      }
+      if (wheelLockRef.current) return;
 
       wheelLockRef.current = true;
 
@@ -94,9 +84,7 @@ export function SplitPdfViewer() {
     });
 
     return () => {
-      root.removeEventListener("wheel", handleWheel, {
-        capture: true,
-      } as AddEventListenerOptions);
+      root.removeEventListener("wheel", handleWheel, true);
     };
   }, [zoomIn, zoomOut]);
 
@@ -107,7 +95,7 @@ export function SplitPdfViewer() {
 
         return {
           ...prev,
-          [pane]:[...filtered, ...items],
+          [pane]: [...filtered, ...items],
         };
       });
     },
@@ -158,6 +146,13 @@ export function SplitPdfViewer() {
     textItemsByPane.right,
   ]);
 
+  const outlineItems = useMemo<OutlineItem[]>(() => {
+    return [
+      ...extractOutlineItems("left", textItemsByPane.left),
+      ...extractOutlineItems("right", textItemsByPane.right),
+    ];
+  }, [textItemsByPane.left, textItemsByPane.right]);
+
   const handleDividerPointerDown = (
     event: React.PointerEvent<HTMLDivElement>
   ) => {
@@ -196,6 +191,8 @@ export function SplitPdfViewer() {
     >
       <Sidebar
         formulas={formulas}
+        outlineItems={outlineItems}
+        textItemsByPane={textItemsByPane}
         debugTextLayer={debugTextLayer}
         collapsed={isSidebarCollapsed}
         onToggleSidebar={() => setIsSidebarCollapsed((value) => !value)}

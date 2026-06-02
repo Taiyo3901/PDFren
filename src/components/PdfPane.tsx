@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { pdfjsLib } from "../lib/pdfjs";
 import { PdfPage } from "./PdfPage";
 import type { PaneId, PdfTextItem } from "../types/pdf";
@@ -10,31 +10,53 @@ type PdfPaneProps = {
   onTextItems: (pane: PaneId, page: number, items: PdfTextItem[]) => void;
 };
 
-const MIN_SCALE = 0.35;
-const PANE_HORIZONTAL_PADDING = 48;
-const AUTO_FIT_MARGIN = 24;
+type ScrollAnchor = {
+  page: number;
+  ratioY: number;
+};
+
+const MIN_SCALE = 0.25;
+const PANE_HORIZONTAL_PADDING = 40;
+const AUTO_FIT_MARGIN = 16;
 
 export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
   const paneState = useViewerStore((state) => state.panes[pane]);
   const setTotalPages = useViewerStore((state) => state.setTotalPages);
   const setPageNumber = useViewerStore((state) => state.setPageNumber);
+  const setUserScale = useViewerStore((state) => state.setUserScale);
   const setFitScale = useViewerStore((state) => state.setFitScale);
 
   const containerRef = useRef<HTMLElement | null>(null);
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const tickingRef = useRef(false);
+
   const initialScrollDoneRef = useRef(false);
+  const lastJumpRequestIdRef = useRef<number>(paneState.jumpRequestId);
+  const previousScaleRef = useRef<number>(paneState.userScale);
+  const scrollAnchorRef = useRef<ScrollAnchor | null>(null);
+  const suppressPageDetectUntilRef = useRef<number>(0);
+
+  const lastAvailableWidthRef = useRef<number | null>(null);
+  const latestUserScaleRef = useRef<number>(paneState.userScale);
 
   const [pdf, setPdf] = useState<any>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [basePageWidth, setBasePageWidth] = useState<number | null>(null);
 
-  const effectiveScale = useMemo(() => {
-    return Math.min(paneState.userScale, paneState.fitScale);
-  }, [paneState.userScale, paneState.fitScale]);
+  const effectiveScale = paneState.userScale;
+
+  useEffect(() => {
+    latestUserScaleRef.current = paneState.userScale;
+  }, [paneState.userScale]);
 
   useEffect(() => {
     initialScrollDoneRef.current = false;
+    lastJumpRequestIdRef.current = paneState.jumpRequestId;
+    previousScaleRef.current = paneState.userScale;
+    scrollAnchorRef.current = null;
+    suppressPageDetectUntilRef.current = 0;
+    lastAvailableWidthRef.current = null;
+
     setBasePageWidth(null);
 
     if (!paneState.pdfUrl) {
@@ -83,73 +105,12 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
     };
   }, [pane, paneState.pdfUrl, setTotalPages]);
 
-  useEffect(() => {
+  const getDominantVisiblePage = (): number => {
     const container = containerRef.current;
 
-    if (!container || !basePageWidth) {
-      return;
+    if (!container || !pdf) {
+      return paneState.pageNumber;
     }
-
-    const updateFitScale = () => {
-      const availableWidth =
-        container.clientWidth - PANE_HORIZONTAL_PADDING - AUTO_FIT_MARGIN;
-
-      if (availableWidth <= 0) {
-        return;
-      }
-
-      const nextFitScale = Math.max(MIN_SCALE, availableWidth / basePageWidth);
-
-      setFitScale(pane, nextFitScale);
-    };
-
-    const observer = new ResizeObserver(() => {
-      window.requestAnimationFrame(updateFitScale);
-    });
-
-    observer.observe(container);
-
-    window.requestAnimationFrame(updateFitScale);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [pane, basePageWidth, setFitScale]);
-
-  // 初回ロード時だけ、現在ページへ移動
-  useEffect(() => {
-    if (!pdf) return;
-    if (initialScrollDoneRef.current) return;
-
-    const target = pageRefs.current[paneState.pageNumber];
-
-    if (target) {
-      target.scrollIntoView({
-        block: "start",
-        behavior: "auto",
-      });
-
-      initialScrollDoneRef.current = true;
-    }
-  }, [pdf, paneState.pageNumber]);
-
-  // 数字入力などによる明示的ジャンプ時だけ動く
-  useEffect(() => {
-    if (!pdf) return;
-
-    const target = pageRefs.current[paneState.pageNumber];
-
-    if (!target) return;
-
-    target.scrollIntoView({
-      block: "start",
-      behavior: "smooth",
-    });
-  }, [pdf, paneState.jumpRequestId, paneState.pageNumber]);
-
-  const updateDominantVisiblePage = () => {
-    const container = containerRef.current;
-    if (!container || !pdf) return;
 
     const containerRect = container.getBoundingClientRect();
 
@@ -178,7 +139,177 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
       }
     }
 
-    if (bestVisibleArea > 0 && bestPage !== paneState.pageNumber) {
+    return bestPage;
+  };
+
+  const getScrollAnchor = (): ScrollAnchor | null => {
+    const container = containerRef.current;
+
+    if (!container) return null;
+
+    const page = getDominantVisiblePage();
+    const pageElement = pageRefs.current[page];
+
+    if (!pageElement) return null;
+
+    const containerRect = container.getBoundingClientRect();
+    const pageRect = pageElement.getBoundingClientRect();
+
+    const offsetInPage = containerRect.top - pageRect.top;
+
+    const ratioY =
+      pageElement.offsetHeight > 0
+        ? Math.min(Math.max(offsetInPage / pageElement.offsetHeight, 0), 1)
+        : 0;
+
+    return {
+      page,
+      ratioY,
+    };
+  };
+
+  const restoreScrollAnchor = (anchor: ScrollAnchor | null) => {
+    if (!anchor) return;
+
+    const container = containerRef.current;
+    const pageElement = pageRefs.current[anchor.page];
+
+    if (!container || !pageElement) return;
+
+    const targetTop =
+      pageElement.offsetTop + pageElement.offsetHeight * anchor.ratioY;
+
+    container.scrollTop = Math.max(0, targetTop);
+  };
+
+  /**
+   * 自動縮尺:
+   * - 初回表示時には、PDFがペインより大きすぎる場合のみ縮小
+   * - ペイン幅が狭くなった時のみ縮小
+   * - ユーザーがズームインしただけでは縮小しない
+   */
+  useEffect(() => {
+    const container = containerRef.current;
+
+    if (!container || !basePageWidth) return;
+
+    const updateFitAndShrinkIfNeeded = () => {
+      const availableWidth =
+        container.clientWidth - PANE_HORIZONTAL_PADDING - AUTO_FIT_MARGIN;
+
+      if (availableWidth <= 0) return;
+
+      const fitScale = Math.max(MIN_SCALE, availableWidth / basePageWidth);
+      setFitScale(pane, fitScale);
+
+      const previousAvailableWidth = lastAvailableWidthRef.current;
+      const currentUserScale = latestUserScaleRef.current;
+      const currentRenderedWidth = basePageWidth * currentUserScale;
+
+      const isInitialMeasure = previousAvailableWidth === null;
+      const paneBecameNarrower =
+        previousAvailableWidth !== null &&
+        availableWidth < previousAvailableWidth - 2;
+
+      const shouldAutoShrink =
+        (isInitialMeasure || paneBecameNarrower) &&
+        currentRenderedWidth > availableWidth;
+
+      if (shouldAutoShrink) {
+        const nextScale = Math.max(MIN_SCALE, fitScale);
+
+        if (nextScale < currentUserScale) {
+          scrollAnchorRef.current = getScrollAnchor();
+          setUserScale(pane, nextScale);
+        }
+      }
+
+      lastAvailableWidthRef.current = availableWidth;
+    };
+
+    const observer = new ResizeObserver(() => {
+      window.requestAnimationFrame(updateFitAndShrinkIfNeeded);
+    });
+
+    observer.observe(container);
+    window.requestAnimationFrame(updateFitAndShrinkIfNeeded);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [pane, basePageWidth, setFitScale, setUserScale]);
+
+  // 初回ロード時のみ現在ページへ移動
+  useEffect(() => {
+    if (!pdf) return;
+    if (initialScrollDoneRef.current) return;
+
+    const target = pageRefs.current[paneState.pageNumber];
+
+    if (!target) return;
+
+    target.scrollIntoView({
+      block: "start",
+      behavior: "auto",
+    });
+
+    initialScrollDoneRef.current = true;
+    suppressPageDetectUntilRef.current = Date.now() + 250;
+  }, [pdf, paneState.pageNumber]);
+
+  // 明示的ページジャンプ時のみscrollIntoView
+  useEffect(() => {
+    if (!pdf) return;
+
+    if (paneState.jumpRequestId === lastJumpRequestIdRef.current) {
+      return;
+    }
+
+    lastJumpRequestIdRef.current = paneState.jumpRequestId;
+
+    const target = pageRefs.current[paneState.pageNumber];
+
+    if (!target) return;
+
+    target.scrollIntoView({
+      block: "start",
+      behavior: "smooth",
+    });
+
+    suppressPageDetectUntilRef.current = Date.now() + 500;
+  }, [pdf, paneState.jumpRequestId, paneState.pageNumber]);
+
+  // ズーム後に見ていた位置を復元
+  useEffect(() => {
+    if (!pdf) return;
+
+    if (previousScaleRef.current === paneState.userScale) {
+      return;
+    }
+
+    const anchor = scrollAnchorRef.current ?? getScrollAnchor();
+
+    previousScaleRef.current = paneState.userScale;
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        restoreScrollAnchor(anchor);
+        scrollAnchorRef.current = null;
+        suppressPageDetectUntilRef.current = Date.now() + 300;
+      });
+    });
+  }, [pdf, paneState.userScale]);
+
+  const updateDominantVisiblePage = () => {
+    if (!pdf) return;
+
+    if (Date.now() < suppressPageDetectUntilRef.current) {
+      return;
+    }
+
+    const bestPage = getDominantVisiblePage();
+
+    if (bestPage !== paneState.pageNumber) {
       setPageNumber(pane, bestPage);
     }
   };
@@ -230,9 +361,7 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
     >
       <div className="pane-status">
         {pane === "left" ? "左" : "右"} / p.{paneState.pageNumber} /{" "}
-        {paneState.totalPages} / 表示 {Math.round(effectiveScale * 100)}%
-        {" / "}
-        手動 {Math.round(paneState.userScale * 100)}%
+        {paneState.totalPages} / {Math.round(effectiveScale * 100)}%
       </div>
 
       {Array.from({ length: pdf.numPages }, (_, index) => {
@@ -247,6 +376,7 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
             data-page-wrapper={pageNumber}
           >
             <PdfPage
+              pane={pane}
               pdf={pdf}
               pageNumber={pageNumber}
               scale={effectiveScale}

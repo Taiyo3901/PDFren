@@ -1,26 +1,32 @@
-export function cropFormulaRegion(canvas: HTMLCanvasElement) {
-  const w = canvas.width;
-  const h = canvas.height;
+import type { PdfRect } from "../types/pdf";
 
-  const cropped = document.createElement("canvas");
+export function cropCanvasByCssRect(
+  canvas: HTMLCanvasElement,
+  rect: PdfRect,
+  padding = 8
+): string {
+  const cssWidth = Number(canvas.style.width.replace("px", "")) || canvas.width;
+  const cssHeight = Number(canvas.style.height.replace("px", "")) || canvas.height;
 
-  // ✅ 中央部だけ切る（数式は中央に多い）
-  cropped.width = w * 0.6;
-  cropped.height = h * 0.4;
+  const ratioX = canvas.width / cssWidth;
+  const ratioY = canvas.height / cssHeight;
 
-  const ctx = cropped.getContext("2d")!;
+  const sx = Math.max(0, (rect.x - padding) * ratioX);
+  const sy = Math.max(0, (rect.y - padding) * ratioY);
+  const sw = Math.min(canvas.width - sx, (rect.width + padding * 2) * ratioX);
+  const sh = Math.min(canvas.height - sy, (rect.height + padding * 2) * ratioY);
 
-  ctx.drawImage(
-    canvas,
-    w * 0.2,
-    h * 0.3,
-    w * 0.6,
-    h * 0.4,
-    0,
-    0,
-    cropped.width,
-    cropped.height
-  );
+  const output = document.createElement("canvas");
+  output.width = Math.max(1, Math.floor(sw));
+  output.height = Math.max(1, Math.floor(sh));
 
-  return cropped;
+  const ctx = output.getContext("2d");
+
+  if (!ctx) {
+    throw new Error("Failed to create crop canvas context");
+  }
+
+  ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, output.width, output.height);
+
+  return output.toDataURL("image/png");
 }

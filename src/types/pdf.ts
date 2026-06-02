@@ -1,5 +1,13 @@
 export type PaneId = "left" | "right";
 
+export type PdfRect = {
+  page: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export type PdfTextItem = {
   str: string;
   x: number;
@@ -16,9 +24,45 @@ export type FormulaCandidate = {
   rawText: string;
   latex: string;
   score: number;
+  rect: PdfRect;
+};
+
+export type SearchResult = {
+  id: string;
+  pane: PaneId;
+  page: number;
+  text: string;
+  rect: PdfRect;
+};
+
+export type OutlineItem = {
+  id: string;
+  pane: PaneId;
+  page: number;
+  title: string;
+  level: number;
+  rect: PdfRect;
+};
+
+export type HighlightTarget = {
+  id: string;
+  pane: PaneId;
+  page: number;
+  rect: PdfRect;
+  label?: string;
 };
 
 export type OcrResult = {
   page: number;
   text: string;
+};
+
+export type TextLine = {
+  items: PdfTextItem[];
+  text: string;
+  page: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 };

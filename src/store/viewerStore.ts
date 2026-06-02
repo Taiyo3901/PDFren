@@ -29,15 +29,15 @@ type ViewerState = {
   openLeftPdfOnRightDifferentPage: () => void;
 };
 
-const MIN_SCALE = 0.35;
-const MAX_SCALE = 3;
+const MIN_SCALE = 0.25;
+const MAX_SCALE = 6;
 
 const initialPaneState: PaneState = {
   pdfUrl: null,
   title: "未読み込み",
   pageNumber: 1,
   totalPages: 0,
-  userScale: 1.2,
+  userScale: 1.15,
   fitScale: MAX_SCALE,
   jumpRequestId: 0,
 };
@@ -47,17 +47,15 @@ function clampScale(scale: number): number {
 }
 
 function clampPage(pageNumber: number, totalPages: number): number {
-  if (!Number.isFinite(pageNumber)) {
-    return 1;
-  }
+  if (!Number.isFinite(pageNumber)) return 1;
 
-  const integerPage = Math.floor(pageNumber);
+  const page = Math.floor(pageNumber);
 
   if (totalPages > 0) {
-    return Math.min(Math.max(1, integerPage), totalPages);
+    return Math.min(Math.max(1, page), totalPages);
   }
 
-  return Math.max(1, integerPage);
+  return Math.max(1, page);
 }
 
 export const useViewerStore = create<ViewerState>((set) => ({
@@ -76,6 +74,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
           title,
           pageNumber: 1,
           totalPages: 0,
+          userScale: 1.15,
           fitScale: MAX_SCALE,
           jumpRequestId: state.panes[pane].jumpRequestId + 1,
         },
@@ -130,15 +129,15 @@ export const useViewerStore = create<ViewerState>((set) => ({
   setTotalPages: (pane, totalPages) =>
     set((state) => {
       const current = state.panes[pane];
-      const safeTotalPages = Math.max(0, totalPages);
+      const safeTotal = Math.max(0, totalPages);
 
       return {
         panes: {
           ...state.panes,
           [pane]: {
             ...current,
-            totalPages: safeTotalPages,
-            pageNumber: clampPage(current.pageNumber, safeTotalPages),
+            totalPages: safeTotal,
+            pageNumber: clampPage(current.pageNumber, safeTotal),
           },
         },
       };
@@ -197,9 +196,9 @@ export const useViewerStore = create<ViewerState>((set) => ({
   setFitScale: (pane, fitScale) =>
     set((state) => {
       const current = state.panes[pane];
-      const nextFitScale = clampScale(fitScale);
+      const nextFit = clampScale(fitScale);
 
-      if (current.fitScale === nextFitScale) {
+      if (current.fitScale === nextFit) {
         return state;
       }
 
@@ -208,7 +207,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
           ...state.panes,
           [pane]: {
             ...current,
-            fitScale: nextFitScale,
+            fitScale: nextFit,
           },
         },
       };
@@ -222,7 +221,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
         return state;
       }
 
-      const preferredPage = clampPage(
+      const nextPage = clampPage(
         left.pageNumber + 1,
         left.totalPages || left.pageNumber + 1
       );
@@ -234,7 +233,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
             ...state.panes.right,
             pdfUrl: left.pdfUrl,
             title: `${left.title} / 別ページ`,
-            pageNumber: preferredPage,
+            pageNumber: nextPage,
             totalPages: left.totalPages,
             userScale: left.userScale,
             fitScale: MAX_SCALE,

@@ -1,9 +1,15 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { TextLayer } from "./TextLayer";
+import { HighlightOverlay } from "./HighlightOverlay";
 import { runOCR } from "../pdf/ocr";
-import type { PdfTextItem } from "../types/pdf";
+import {
+  registerPageCanvas,
+  unregisterPageCanvas,
+} from "../pdf/canvasRegistry";
+import type { PaneId, PdfTextItem } from "../types/pdf";
 
 type PdfPageProps = {
+  pane: PaneId;
   pdf: any;
   pageNumber: number;
   scale: number;
@@ -13,6 +19,7 @@ type PdfPageProps = {
 };
 
 function PdfPageComponent({
+  pane,
   pdf,
   pageNumber,
   scale,
@@ -89,6 +96,8 @@ function PdfPageComponent({
           return;
         }
 
+        registerPageCanvas(pane, pageNumber, canvas);
+
         if (disposed) return;
 
         const tc = await page.getTextContent({
@@ -127,6 +136,8 @@ function PdfPageComponent({
     return () => {
       disposed = true;
 
+      unregisterPageCanvas(pane, pageNumber);
+
       if (renderTaskRef.current) {
         try {
           renderTaskRef.current.cancel();
@@ -135,7 +146,7 @@ function PdfPageComponent({
         }
       }
     };
-  }, [pdf, pageNumber, scale, onOcrText]);
+  }, [pane, pdf, pageNumber, scale, onOcrText]);
 
   return (
     <div
@@ -176,6 +187,8 @@ function PdfPageComponent({
         />
       )}
 
+      <HighlightOverlay pane={pane} pageNumber={pageNumber} />
+
       {isOcrRunning && (
         <div
           style={{
@@ -197,13 +210,4 @@ function PdfPageComponent({
   );
 }
 
-export const PdfPage = memo(PdfPageComponent, (prev, next) => {
-  return (
-    prev.pdf === next.pdf &&
-    prev.pageNumber === next.pageNumber &&
-    prev.scale === next.scale &&
-    prev.debugTextLayer === next.debugTextLayer &&
-    prev.onTextItems === next.onTextItems &&
-    prev.onOcrText === next.onOcrText
-  );
-});
+export const PdfPage = memo(PdfPageComponent);

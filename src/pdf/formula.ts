@@ -1,14 +1,9 @@
-import type { FormulaCandidate, PaneId, PdfTextItem } from "../types/pdf";
-
-type TextLine = {
-  items: PdfTextItem[];
-  text: string;
-  page: number;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
+import type {
+  FormulaCandidate,
+  PaneId,
+  PdfTextItem,
+  TextLine,
+} from "../types/pdf";
 
 const MATH_SYMBOL_REGEX = /[=+\-−×÷*/^_√∫∑ΣΠπ∞≈≠≤≥<>±∂∆∇]/;
 const LATIN_VARIABLE_REGEX = /[a-zA-Z]\s*[=+\-−×÷*/^_]/;
@@ -16,13 +11,121 @@ const NUMBER_OPERATOR_REGEX = /\d+\s*[=+\-−×÷*/^_]\s*\d+/;
 const FUNCTION_REGEX = /\b(sin|cos|tan|log|ln|lim|max|min|exp)\b/i;
 const GREEK_REGEX = /[αβγδθλμσφωΩΓΔΛ]/i;
 
+function normalizeText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
 function normalizeFormulaText(text: string): string {
-  return text
+  return normalizeText(text)
     .replaceAll("−", "-")
     .replaceAll("×", "*")
-    .replaceAll("÷", "/")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replaceAll("÷", "/");
+}
+
+function getMedian(values: number[]): number {
+  if (values.length === 0) return 0;
+
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? 0;
+}
+
+function joinLineItems(items: PdfTextItem[]): string {
+  const sorted = [...items].sort((a, b) => a.x - b.x);
+
+  let text = "";
+  let previousRight = 0;
+
+  const medianHeight = getMedian(sorted.map((item) => item.height)) || 10;
+
+  for (const item of sorted) {
+    const gap = item.x - previousRight;
+
+    if (text.length > 0 && gap > medianHeight * 0.4) {
+      text += " ";
+    }
+
+    text += item.str;
+    previousRight = item.x + item.width;
+  }
+
+  return normalizeText(text);
+}
+
+function buildTextLines(items: PdfTextItem[]): TextLine[] {
+  const sortedItems = [...items].sort((a, b) => {
+    const aCenterY = a.y + a.height / 2;
+    const bCenterY = b.y + b.height / 2;
+
+    const yDiff = aCenterY - bCenterY;
+
+    if (Math.abs(yDiff) > Math.max(4, Math.min(a.height, b.height) * 0.45)) {
+      return yDiff;
+    }
+
+    return a.x - b.x;
+  });
+
+  const lines: TextLine[] = [];
+
+  for (const item of sortedItems) {
+    const itemCenterY = item.y + item.height / 2;
+
+    let matchedLine: TextLine | null = null;
+
+    for (const line of lines) {
+      if (line.page !== item.page) continue;
+
+      const lineCenterY = line.y + line.height / 2;
+      const threshold = Math.max(5, Math.max(line.height, item.height) * 0.45);
+
+      if (Math.abs(lineCenterY - itemCenterY) <= threshold) {
+        matchedLine = line;
+        break;
+      }
+    }
+
+    if (matchedLine) {
+      matchedLine.items.push(item);
+      matchedLine.items.sort((a, b) => a.x - b.x);
+
+      const minX = Math.min(...matchedLine.items.map((textItem) => textItem.x));
+      const maxX = Math.max(
+        ...matchedLine.items.map((textItem) => textItem.x + textItem.width)
+      );
+      const minY = Math.min(...matchedLine.items.map((textItem) => textItem.y));
+      const maxY = Math.max(
+        ...matchedLine.items.map((textItem) => textItem.y + textItem.height)
+      );
+
+      matchedLine.x = minX;
+      matchedLine.y = minY;
+      matchedLine.width = maxX - minX;
+      matchedLine.height = maxY - minY;
+      matchedLine.text = joinLineItems(matchedLine.items);
+    } else {
+      const newLine: TextLine = {
+        items: [item],
+        text: item.str,
+        page: item.page,
+        x: item.x,
+        y: item.y,
+        width: item.width,
+        height: item.height,
+      };
+
+      lines.push(newLine);
+    }
+  }
+
+  return lines.sort((a, b) => {
+    const yDiff = a.y - b.y;
+
+    if (Math.abs(yDiff) > 4) {
+      return yDiff;
+    }
+
+    return a.x - b.x;
+  });
 }
 
 function scoreFormulaLine(text: string): number {
@@ -43,7 +146,6 @@ function scoreFormulaLine(text: string): number {
   if (normalized.length <= 2) score -= 3;
   if (/^[。、，．・:：\s]+$/.test(normalized)) score -= 5;
 
-  // 日本語文章だけの行は数式ではない可能性が高い
   if (/^[ぁ-んァ-ヶ一-龠\s。、，．・:：]+$/.test(normalized)) {
     score -= 4;
   }
@@ -104,90 +206,12 @@ function applySymbolReplacements(text: string): string {
   return result;
 }
 
-export function buildTextLines(items: PdfTextItem[]): TextLine[] {
-  const sortedItems = [...items].sort((a, b) => {
-    const aCenterY = a.y + a.height / 2;
-    const bCenterY = b.y + b.height / 2;
-
-    const yDiff = aCenterY - bCenterY;
-
-    if (Math.abs(yDiff) > Math.max(4, Math.min(a.height, b.height) * 0.45)) {
-      return yDiff;
-    }
-
-    return a.x - b.x;
-  });
-
-  const lines: TextLine[] = [];
-
-  for (const item of sortedItems) {
-    const itemCenterY = item.y + item.height / 2;
-
-    let matchedLine: TextLine | null = null;
-
-    for (const line of lines) {
-      if (line.page !== item.page) continue;
-
-      const lineCenterY = line.y + line.height / 2;
-      const threshold = Math.max(5, Math.max(line.height, item.height) * 0.45);
-
-      if (Math.abs(lineCenterY - itemCenterY) <= threshold) {
-        matchedLine = line;
-        break;
-      }
-    }
-
-    if (matchedLine) {
-      matchedLine.items.push(item);
-      matchedLine.items.sort((a, b) => a.x - b.x);
-
-      const minX = Math.min(...matchedLine.items.map((textItem) => textItem.x));
-      const maxX = Math.max(
-        ...matchedLine.items.map((textItem) => textItem.x + textItem.width)
-      );
-      const minY = Math.min(...matchedLine.items.map((textItem) => textItem.y));
-      const maxY = Math.max(
-        ...matchedLine.items.map((textItem) => textItem.y + textItem.height)
-      );
-
-      matchedLine.x = minX;
-      matchedLine.y = minY;
-      matchedLine.width = maxX - minX;
-      matchedLine.height = maxY - minY;
-      matchedLine.text = matchedLine.items.map((textItem) => textItem.str).join("");
-    } else {
-      const newLine: TextLine = {
-        items: [item],
-        text: item.str,
-        page: item.page,
-        x: item.x,
-        y: item.y,
-        width: item.width,
-        height: item.height,
-      };
-
-      lines.push(newLine);
-    }
-  }
-
-  return lines.sort((a, b) => {
-    const yDiff = a.y - b.y;
-
-    if (Math.abs(yDiff) > 4) {
-      return yDiff;
-    }
-
-    return a.x - b.x;
-  });
-}
-
 function lineItemsToLatex(items: PdfTextItem[]): string {
   if (items.length === 0) return "";
 
   const sortedItems = [...items].sort((a, b) => a.x - b.x);
 
-  const heights = sortedItems.map((item) => item.height).sort((a, b) => a - b);
-  const medianHeight = heights[Math.floor(heights.length / 2)] || 10;
+  const medianHeight = getMedian(sortedItems.map((item) => item.height)) || 10;
 
   const centers = sortedItems
     .map((item) => item.y + item.height / 2)
@@ -200,7 +224,6 @@ function lineItemsToLatex(items: PdfTextItem[]): string {
 
   for (const item of sortedItems) {
     const raw = normalizeFormulaText(item.str);
-
     if (!raw) continue;
 
     const centerY = item.y + item.height / 2;
@@ -237,18 +260,6 @@ function lineItemsToLatex(items: PdfTextItem[]): string {
   return latex.trim();
 }
 
-export function textToLatex(input: string): string {
-  let text = normalizeFormulaText(input);
-
-  text = escapeLatexText(text);
-  text = applySymbolReplacements(text);
-
-  text = text.replace(/([a-zA-Z0-9)\]}])\^([a-zA-Z0-9]+)/g, "$1^{$2}");
-  text = text.replace(/([a-zA-Z0-9)\]}])_([a-zA-Z0-9]+)/g, "$1_{$2}");
-
-  return text.trim();
-}
-
 function dedupeCandidates(candidates: FormulaCandidate[]): FormulaCandidate[] {
   const seen = new Set<string>();
   const result: FormulaCandidate[] = [];
@@ -263,6 +274,18 @@ function dedupeCandidates(candidates: FormulaCandidate[]): FormulaCandidate[] {
   }
 
   return result.sort((a, b) => b.score - a.score);
+}
+
+export function textToLatex(input: string): string {
+  let text = normalizeFormulaText(input);
+
+  text = escapeLatexText(text);
+  text = applySymbolReplacements(text);
+
+  text = text.replace(/([a-zA-Z0-9)\]}])\^([a-zA-Z0-9]+)/g, "$1^{$2}");
+  text = text.replace(/([a-zA-Z0-9)\]}])_([a-zA-Z0-9]+)/g, "$1_{$2}");
+
+  return text.trim();
 }
 
 export function extractFormulaCandidates(
@@ -289,6 +312,13 @@ export function extractFormulaCandidates(
         rawText,
         latex,
         score,
+        rect: {
+          page,
+          x: line.x,
+          y: line.y,
+          width: line.width,
+          height: line.height,
+        },
       };
 
       candidates.push(candidate);

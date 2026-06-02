@@ -6,8 +6,37 @@ body,
 }
 
 body {
- .app-layout.sidebar-collapsed {  background: #111;
-  grid-template-columns: 44px 1fr;
+  background: #111;
+  color: white;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+button {
+  cursor: pointer;
+  font-size: 12px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+input {
+  font-family: inherit;
+}
+
+.app-layout {
+  display: grid;
+  min-height: 100vh;
+}
+
+.app-layout.sidebar-expanded {
+  grid-template-columns: 280px 1fr;
+}
+
+.app-layout.sidebar-collapsed {
+  grid-template-columns: 40px 1fr;
 }
 
 .sidebar {
@@ -15,12 +44,12 @@ body {
   overflow-y: auto;
   background: #181818;
   border-right: 1px solid #333;
-  padding: 16px;
+  padding: 10px;
   box-sizing: border-box;
 }
 
 .sidebar-mini {
-  padding: 8px;
+  padding: 6px;
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -30,12 +59,12 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
 }
 
 .sidebar h1 {
-  margin: 0 0 16px;
-  font-size: 20px;
+  margin: 0 0 10px;
+  font-size: 16px;
 }
 
 .sidebar-toggle {
@@ -43,18 +72,18 @@ body {
   background: #222;
   color: white;
   border-radius: 8px;
-  padding: 6px 8px;
+  padding: 5px 7px;
 }
 
 .sidebar-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .sidebar-tabs button {
-  padding: 8px;
+  padding: 6px;
   border: 1px solid #444;
   background: #222;
   color: white;
@@ -69,12 +98,20 @@ body {
 .sidebar-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+}
+
+.primary-button {
+  padding: 7px;
+  border: 1px solid #2563eb;
+  background: #1d4ed8;
+  color: white;
+  border-radius: 8px;
 }
 
 .collapsible-section {
   border: 1px solid #333;
-  border-radius: 12px;
+  border-radius: 10px;
   background: #202020;
   overflow: hidden;
 }
@@ -83,39 +120,48 @@ body {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px;
+  gap: 6px;
+  padding: 8px;
   background: #252525;
   color: white;
   border: none;
   border-bottom: 1px solid #333;
   text-align: left;
+  font-size: 13px;
 }
 
 .collapsible-body {
-  padding: 12px;
+  padding: 8px;
 }
 
 .pane-controls-inner {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
+}
+
+.section-label {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #93c5fd;
+  font-weight: 600;
 }
 
 .file-name {
-  font-size: 12px;
+  font-size: 11px;
   opacity: 0.75;
   word-break: break-all;
 }
 
 .file-button {
   display: block;
-  padding: 8px;
+  padding: 6px;
   text-align: center;
   background: #333;
   color: white;
   border-radius: 8px;
   cursor: pointer;
+  font-size: 12px;
 }
 
 .file-button input {
@@ -125,21 +171,21 @@ body {
 .control-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .control-row button {
-  min-width: 32px;
-  padding: 4px 8px;
+  min-width: 28px;
+  padding: 4px 7px;
 }
 
 .page-info {
-  font-size: 13px;
+  font-size: 12px;
   color: #ddd;
 }
 
 .hint {
-  font-size: 12px;
+  font-size: 11px;
   color: #999;
   line-height: 1.4;
 }
@@ -147,14 +193,13 @@ body {
 .page-jump-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  font-size: 13px;
+  gap: 5px;
+  font-size: 12px;
 }
 
 .page-jump-input {
-  width: 64px;
-  padding: 4px 6px;
+  width: 56px;
+  padding: 4px 5px;
   border-radius: 6px;
   border: 1px solid #444;
   background: #111;
@@ -238,12 +283,12 @@ body {
   top: 0;
   z-index: 50;
   margin-bottom: 8px;
-  padding: 6px 10px;
+  padding: 5px 8px;
   background: rgba(20, 20, 20, 0.9);
   border: 1px solid #333;
   border-radius: 8px;
   color: #ddd;
-  font-size: 12px;
+  font-size: 11px;
   width: fit-content;
 }
 
@@ -274,45 +319,46 @@ body {
 .formula-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .formula-card {
   border: 1px solid #333;
   border-radius: 10px;
-  padding: 10px;
+  padding: 8px;
   background: #111;
 }
 
 .formula-meta {
-  font-size: 12px;
+  font-size: 11px;
   opacity: 0.65;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 .formula-raw {
-  font-size: 13px;
-  margin-bottom: 6px;
+  font-size: 12px;
+  margin-bottom: 5px;
   word-break: break-all;
 }
 
 .formula-latex {
   margin: 0 0 8px;
-  padding: 8px;
+  padding: 7px;
   background: #222;
   border-radius: 6px;
   color: #dbeafe;
   white-space: pre-wrap;
   word-break: break-all;
+  font-size: 12px;
 }
 
 .empty-message {
-  font-size: 13px;
+  font-size: 12px;
   opacity: 0.65;
 }
 
 .copied {
-  font-size: 13px;
+  font-size: 12px;
   color: #86efac;
 }
 
@@ -329,30 +375,122 @@ body {
   padding: 16px;
   border-radius: 8px;
 }
+
+.zoom-input {
+  width: 58px;
+  padding: 4px 5px;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background: #111;
   color: white;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
 }
 
-button {
-  cursor: pointer;
+.sidebar-tabs.five-tabs {
+  grid-template-columns: repeat(5, 1fr);
 }
 
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
+.search-input,
+.qa-input,
+.zoom-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background: #111;
+  color: white;
 }
 
-input {
-  font-family: inherit;
+.qa-input {
+  min-height: 90px;
+  resize: vertical;
 }
 
-.app-layout {
-  display: grid;
-  min-height: 100vh;
+.qa-answer {
+  white-space: pre-wrap;
+  background: #222;
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 12px;
 }
 
-.app-layout.sidebar-expanded {
-  grid-template-columns: 340px 1fr;
+.small-label {
+  font-size: 12px;
+  color: #aaa;
 }
 
+.result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.result-card {
+  text-align: left;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: #161616;
+  color: white;
+  padding: 8px;
+}
+
+.result-meta {
+  font-size: 11px;
+  color: #93c5fd;
+  margin-bottom: 4px;
+}
+
+.panel-section {
+  border: 1px solid #333;
+  border-radius: 10px;
+  background: #202020;
+  padding: 8px;
+}
+
+.panel-section h2,
+.pane-control-card h2 {
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+
+.pane-control-card {
+  border: 1px solid #333;
+  border-radius: 10px;
+  background: #202020;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.outline-item {
+  width: 100%;
+  display: block;
+  text-align: left;
+  background: #151515;
+  color: white;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 6px;
+  margin-top: 6px;
+}
+
+.outline-item.level-2 {
+  padding-left: 16px;
+  opacity: 0.9;
+}
+
+.formula-jump {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: #93c5fd;
+  border: none;
+  padding: 0;
+  margin-bottom: 5px;
+}
+
+.formula-actions {
+  display: flex;
+  gap: 6px;
+}

@@ -1,21 +1,40 @@
 import type { ChangeEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import type { FormulaCandidate, PaneId } from "../types/pdf";
+import type {
+  FormulaCandidate,
+  OutlineItem,
+  PaneId,
+  PdfTextItem,
+  SearchResult,
+} from "../types/pdf";
 import { copyLatexToClipboard } from "../pdf/formula";
+import { searchTextItems } from "../pdf/search";
+import { getPageCanvas } from "../pdf/canvasRegistry";
+import { cropCanvasByCssRect } from "../pdf/crop";
+import { runMathOcr } from "../pdf/mathOcr";
+import { askPaperQuestion } from "../pdf/qa";
+import { itemsToPlainText } from "../pdf/textLayout";
 import { useViewerStore } from "../store/viewerStore";
+import { useHighlightStore } from "../store/highlightStore";
+
+type TextItemsByPane = Record<PaneId, PdfTextItem[]>;
 
 type SidebarProps = {
   formulas: FormulaCandidate[];
+  outlineItems: OutlineItem[];
+  textItemsByPane: TextItemsByPane;
   debugTextLayer: boolean;
   collapsed: boolean;
   onToggleSidebar: () => void;
   onToggleDebugTextLayer: () => void;
 };
 
-type SidebarTab = "controls" | "latex";
+type SidebarTab = "controls" | "search" | "outline" | "latex" | "qa";
 
 export function Sidebar({
   formulas,
+  outlineItems,
+  textItemsByPane,
   debugTextLayer,
   collapsed,
   onToggleSidebar,
@@ -23,11 +42,12 @@ export function Sidebar({
 }: SidebarProps) {
   const [tab, setTab] = useState<SidebarTab>("controls");
   const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const [isLeftControlsOpen, setIsLeftControlsOpen] = useState(true);
-  const [isRightControlsOpen, setIsRightControlsOpen] = useState(true);
-  const [isLatexLeftOpen, setIsLatexLeftOpen] = useState(true);
-  const [isLatexRightOpen, setIsLatexRightOpen] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [ocrLatexById, setOcrLatexById] = useState<Record<string, string>>({});
+  const [ocrLoadingId, setOcrLoadingId] = useState<string | null>(null);
+  const [qaQuestion, setQaQuestion] = useState("");
+  const [qaAnswer, setQaAnswer] = useState("");
+  const [qaLoading, setQaLoading] = useState(false);
 
   const panes = useViewerStore((state) => state.panes);
   const loadPdf = useViewerStore((state) => state.loadPdf);
@@ -35,9 +55,21 @@ export function Sidebar({
   const jumpToPage = useViewerStore((state) => state.jumpToPage);
   const zoomIn = useViewerStore((state) => state.zoomIn);
   const zoomOut = useViewerStore((state) => state.zoomOut);
+  const setUserScale = useViewerStore((state) => state.setUserScale);
   const openLeftPdfOnRightDifferentPage = useViewerStore(
     (state) => state.openLeftPdfOnRightDifferentPage
   );
+
+  const setHighlight = useHighlightStore((state) => state.setHighlight);
+
+  const searchResults = useMemo<SearchResult[]>(() => {
+    if (!searchQuery.trim()) return [];
+
+    return [
+      ...searchTextItems("left", searchQuery, textItemsByPane.left),
+      ...searchTextItems("right", searchQuery, textItemsByPane.right),
+    ];
+  }, [searchQuery, textItemsByPane.left, textItemsByPane.right]);
 
   const formulasByPane = useMemo(() => {
     return {
@@ -45,6 +77,13 @@ export function Sidebar({
       right: formulas.filter((formula) => formula.pane === "right"),
     };
   }, [formulas]);
+
+  const outlineByPane = useMemo(() => {
+    return {
+      left: outlineItems.filter((item) => item.pane === "left"),
+      right: outlineItems.filter((item) => item.pane === "right"),
+    };
+  }, [outlineItems]);
 
   const handleFileChange = (
     pane: PaneId,
@@ -60,14 +99,28 @@ export function Sidebar({
     event.target.value = "";
   };
 
-  const effectiveLeftScale = Math.min(panes.left.userScale, panes.left.fitScale);
-  const effectiveRightScale = Math.min(
-    panes.right.userScale,
-    panes.right.fitScale
-  );
+  const jumpAndHighlight = (target: {
+    id: string;
+    pane: PaneId;
+    page: number;
+    rect: { page: number; x: number; y: number; width: number; height: number };
+    label?: string;
+  }) => {
+    jumpToPage(target.pane, target.page);
+
+    setHighlight({
+      id: target.id,
+      pane: target.pane,
+      page: target.page,
+      rect: target.rect,
+      label: target.label,
+    });
+  };
 
   const copyOne = async (formula: FormulaCandidate) => {
-    await copyLatexToClipboard(formula.latex);
+    const latex = ocrLatexById[formula.id] ?? formula.latex;
+
+    await copyLatexToClipboard(latex);
     setCopiedId(formula.id);
 
     window.setTimeout(() => {
@@ -77,7 +130,10 @@ export function Sidebar({
 
   const copyAllCurrentPage = async () => {
     const text = formulas
-      .map((formula) => `% ${formula.pane} p.${formula.page}\n${formula.latex}`)
+      .map((formula) => {
+        const latex = ocrLatexById[formula.id] ?? formula.latex;
+        return `% ${formula.pane} p.${formula.page}\n${latex}`;
+      })
       .join("\n\n");
 
     await copyLatexToClipboard(text);
@@ -86,6 +142,61 @@ export function Sidebar({
     window.setTimeout(() => {
       setCopiedId(null);
     }, 1200);
+  };
+
+  const runFormulaImageOcr = async (formula: FormulaCandidate) => {
+    const canvas = getPageCanvas(formula.pane, formula.page);
+
+    if (!canvas) {
+      alert("対象ページのCanvasが見つかりません。ページを表示してから再実行してください。");
+      return;
+    }
+
+    try {
+      setOcrLoadingId(formula.id);
+
+      const base64 = cropCanvasByCssRect(canvas, formula.rect, 10);
+      const latex = await runMathOcr(base64);
+
+      setOcrLatexById((prev) => ({
+        ...prev,
+        [formula.id]: latex,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      alert(message);
+    } finally {
+      setOcrLoadingId(null);
+    }
+  };
+
+  const askQuestion = async () => {
+    if (!qaQuestion.trim()) return;
+
+    const context = [
+      "左ペイン:",
+      itemsToPlainText(textItemsByPane.left),
+      "",
+      "右ペイン:",
+      itemsToPlainText(textItemsByPane.right),
+    ].join("\n");
+
+    try {
+      setQaLoading(true);
+      setQaAnswer("");
+
+      const result = await askPaperQuestion({
+        question: qaQuestion,
+        context,
+      });
+
+      setQaAnswer(result.answer);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setQaAnswer(`エラー: ${message}`);
+    } finally {
+      setQaLoading(false);
+    }
   };
 
   if (collapsed) {
@@ -101,13 +212,13 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-title-row">
-        <h1>Paper PDF Analyzer</h1>
+        <h1>PDF Analyzer</h1>
         <button className="sidebar-toggle" onClick={onToggleSidebar}>
           ◀
         </button>
       </div>
 
-      <div className="sidebar-tabs">
+      <div className="sidebar-tabs five-tabs">
         <button
           className={tab === "controls" ? "active" : ""}
           onClick={() => setTab("controls")}
@@ -116,62 +227,125 @@ export function Sidebar({
         </button>
 
         <button
+          className={tab === "search" ? "active" : ""}
+          onClick={() => setTab("search")}
+        >
+          検索
+        </button>
+
+        <button
+          className={tab === "outline" ? "active" : ""}
+          onClick={() => setTab("outline")}
+        >
+          目次
+        </button>
+
+        <button
           className={tab === "latex" ? "active" : ""}
           onClick={() => setTab("latex")}
         >
           LaTeX
         </button>
+
+        <button
+          className={tab === "qa" ? "active" : ""}
+          onClick={() => setTab("qa")}
+        >
+          Q&A
+        </button>
       </div>
 
       {tab === "controls" && (
         <div className="sidebar-content">
-          <button onClick={openLeftPdfOnRightDifferentPage}>
-            左PDFの別ページを右に開く
+          <button className="primary-button" onClick={openLeftPdfOnRightDifferentPage}>
+            左PDFの別ページを右へ
           </button>
+
+          <PaneControls
+            title="左ペイン"
+            pane="left"
+            fileName={panes.left.title}
+            pageNumber={panes.left.pageNumber}
+            totalPages={panes.left.totalPages}
+            userScale={panes.left.userScale}
+            onFileChange={handleFileChange}
+            onClear={clearPdf}
+            onJumpPage={jumpToPage}
+            onZoomIn={() => zoomIn("left")}
+            onZoomOut={() => zoomOut("left")}
+            onSetScale={setUserScale}
+          />
+
+          <PaneControls
+            title="右ペイン"
+            pane="right"
+            fileName={panes.right.title}
+            pageNumber={panes.right.pageNumber}
+            totalPages={panes.right.totalPages}
+            userScale={panes.right.userScale}
+            onFileChange={handleFileChange}
+            onClear={clearPdf}
+            onJumpPage={jumpToPage}
+            onZoomIn={() => zoomIn("right")}
+            onZoomOut={() => zoomOut("right")}
+            onSetScale={setUserScale}
+          />
 
           <button onClick={onToggleDebugTextLayer}>
             TextLayer Debug: {debugTextLayer ? "ON" : "OFF"}
           </button>
+        </div>
+      )}
 
-          <CollapsibleSection
-            title="左ペイン操作"
-            open={isLeftControlsOpen}
-            onToggle={() => setIsLeftControlsOpen((value) => !value)}
-          >
-            <PaneControls
-              pane="left"
-              fileName={panes.left.title}
-              pageNumber={panes.left.pageNumber}
-              totalPages={panes.left.totalPages}
-              userScale={panes.left.userScale}
-              effectiveScale={effectiveLeftScale}
-              onFileChange={handleFileChange}
-              onClear={clearPdf}
-              onJumpPage={jumpToPage}
-              onZoomIn={() => zoomIn("left")}
-              onZoomOut={() => zoomOut("left")}
-            />
-          </CollapsibleSection>
+      {tab === "search" && (
+        <div className="sidebar-content">
+          <input
+            className="search-input"
+            placeholder="PDF内検索"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
 
-          <CollapsibleSection
-            title="右ペイン操作"
-            open={isRightControlsOpen}
-            onToggle={() => setIsRightControlsOpen((value) => !value)}
-          >
-            <PaneControls
-              pane="right"
-              fileName={panes.right.title}
-              pageNumber={panes.right.pageNumber}
-              totalPages={panes.right.totalPages}
-              userScale={panes.right.userScale}
-              effectiveScale={effectiveRightScale}
-              onFileChange={handleFileChange}
-              onClear={clearPdf}
-              onJumpPage={jumpToPage}
-              onZoomIn={() => zoomIn("right")}
-              onZoomOut={() => zoomOut("right")}
-            />
-          </CollapsibleSection>
+          <div className="small-label">検索結果: {searchResults.length}</div>
+
+          <div className="result-list">
+            {searchResults.map((result) => (
+              <button
+                key={result.id}
+                className="result-card"
+                onClick={() =>
+                  jumpAndHighlight({
+                    id: result.id,
+                    pane: result.pane,
+                    page: result.page,
+                    rect: result.rect,
+                    label: result.text,
+                  })
+                }
+              >
+                <div className="result-meta">
+                  {result.pane} / p.{result.page}
+                </div>
+                <div>{result.text}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "outline" && (
+        <div className="sidebar-content">
+          <OutlineList
+            title="左ペイン"
+            items={outlineByPane.left}
+            onSelect={jumpAndHighlight}
+          />
+
+          <OutlineList
+            title="右ペイン"
+            items={outlineByPane.right}
+            onSelect={jumpAndHighlight}
+          />
         </div>
       )}
 
@@ -183,92 +357,89 @@ export function Sidebar({
 
           {copiedId === "all" && <div className="copied">コピーしました</div>}
 
-          <CollapsibleSection
-            title={`左ペイン LaTeX (${formulasByPane.left.length})`}
-            open={isLatexLeftOpen}
-            onToggle={() => setIsLatexLeftOpen((value) => !value)}
-          >
-            <FormulaList
-              formulas={formulasByPane.left}
-              copiedId={copiedId}
-              onCopy={copyOne}
-            />
-          </CollapsibleSection>
+          <FormulaList
+            title="左 LaTeX"
+            formulas={formulasByPane.left}
+            copiedId={copiedId}
+            ocrLatexById={ocrLatexById}
+            ocrLoadingId={ocrLoadingId}
+            onCopy={copyOne}
+            onHighlight={jumpAndHighlight}
+            onImageOcr={runFormulaImageOcr}
+          />
 
-          <CollapsibleSection
-            title={`右ペイン LaTeX (${formulasByPane.right.length})`}
-            open={isLatexRightOpen}
-            onToggle={() => setIsLatexRightOpen((value) => !value)}
-          >
-            <FormulaList
-              formulas={formulasByPane.right}
-              copiedId={copiedId}
-              onCopy={copyOne}
-            />
-          </CollapsibleSection>
+          <FormulaList
+            title="右 LaTeX"
+            formulas={formulasByPane.right}
+            copiedId={copiedId}
+            ocrLatexById={ocrLatexById}
+            ocrLoadingId={ocrLoadingId}
+            onCopy={copyOne}
+            onHighlight={jumpAndHighlight}
+            onImageOcr={runFormulaImageOcr}
+          />
+        </div>
+      )}
+
+      {tab === "qa" && (
+        <div className="sidebar-content">
+          <textarea
+            className="qa-input"
+            placeholder="論文・PDFについて質問"
+            value={qaQuestion}
+            onChange={(event) => setQaQuestion(event.target.value)}
+          />
+
+          <button onClick={askQuestion} disabled={qaLoading}>
+            {qaLoading ? "回答生成中..." : "質問する"}
+          </button>
+
+          {qaAnswer && <pre className="qa-answer">{qaAnswer}</pre>}
         </div>
       )}
     </aside>
   );
 }
 
-type CollapsibleSectionProps = {
-  title: string;
-  open: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-};
-
-function CollapsibleSection({
-  title,
-  open,
-  onToggle,
-  children,
-}: CollapsibleSectionProps) {
-  return (
-    <section className="collapsible-section">
-      <button className="collapsible-header" onClick={onToggle}>
-        <span>{open ? "▼" : "▶"}</span>
-        <span>{title}</span>
-      </button>
-
-      {open && <div className="collapsible-body">{children}</div>}
-    </section>
-  );
-}
-
 type PaneControlsProps = {
+  title: string;
   pane: PaneId;
   fileName: string;
   pageNumber: number;
   totalPages: number;
   userScale: number;
-  effectiveScale: number;
   onFileChange: (pane: PaneId, event: ChangeEvent<HTMLInputElement>) => void;
   onClear: (pane: PaneId) => void;
   onJumpPage: (pane: PaneId, pageNumber: number) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
+  onSetScale: (pane: PaneId, scale: number) => void;
 };
 
 function PaneControls({
+  title,
   pane,
   fileName,
   pageNumber,
   totalPages,
   userScale,
-  effectiveScale,
   onFileChange,
   onClear,
   onJumpPage,
   onZoomIn,
   onZoomOut,
+  onSetScale,
 }: PaneControlsProps) {
   const [pageInput, setPageInput] = useState(String(pageNumber));
+  const [zoomInput, setZoomInput] = useState(String(Math.round(userScale * 100)));
 
   useEffect(() => {
     setPageInput(String(pageNumber));
   }, [pageNumber]);
+
+  useEffect(() => {
+    setZoomInput(String(Math.round(userScale * 100)));
+  }, [userScale]);
 
   const jump = () => {
     const parsed = Number(pageInput);
@@ -287,8 +458,25 @@ function PaneControls({
     onJumpPage(pane, safePage);
   };
 
+  const applyZoom = () => {
+    const parsed = Number(zoomInput);
+
+    if (!Number.isFinite(parsed)) {
+      setZoomInput(String(Math.round(userScale * 100)));
+      return;
+    }
+
+    const safePercent = Math.min(600, Math.max(25, Math.floor(parsed)));
+    const nextScale = safePercent / 100;
+
+    setZoomInput(String(safePercent));
+    onSetScale(pane, nextScale);
+  };
+
   return (
-    <div className="pane-controls-inner">
+    <section className="pane-control-card">
+      <h2>{title}</h2>
+
       <div className="file-name">{fileName}</div>
 
       <label className="file-button">
@@ -300,21 +488,32 @@ function PaneControls({
         />
       </label>
 
-      <button onClick={() => onClear(pane)}>クリア</button>
+      <button onClick={() => onClear(pane)}>閉じる</button>
 
       <div className="control-row">
         <button onClick={onZoomOut}>-</button>
-        <span>手動 {Math.round(userScale * 100)}%</span>
+
+        <input
+          className="zoom-input"
+          type="number"
+          min={25}
+          max={600}
+          value={zoomInput}
+          onChange={(event) => setZoomInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              applyZoom();
+            }
+          }}
+          onBlur={applyZoom}
+        />
+
+        <span>%</span>
+
         <button onClick={onZoomIn}>+</button>
       </div>
 
-      <div className="page-info">
-        表示倍率: {Math.round(effectiveScale * 100)}%
-      </div>
-
       <div className="page-jump-row">
-        <span>ページ</span>
-
         <input
           className="page-jump-input"
           type="number"
@@ -334,42 +533,121 @@ function PaneControls({
 
         <button onClick={jump}>移動</button>
       </div>
-
-      <div className="hint">
-        通常スクロール: ページ移動 / pinch or Ctrl+wheel: PDFズーム
-      </div>
-    </div>
+    </section>
   );
 }
 
-type FormulaListProps = {
+function OutlineList({
+  title,
+  items,
+  onSelect,
+}: {
+  title: string;
+  items: OutlineItem[];
+  onSelect: (target: {
+    id: string;
+    pane: PaneId;
+    page: number;
+    rect: OutlineItem["rect"];
+    label?: string;
+  }) => void;
+}) {
+  return (
+    <section className="panel-section">
+      <h2>{title}</h2>
+
+      {items.length === 0 && <div className="empty-message">目次候補なし</div>}
+
+      {items.map((item) => (
+        <button
+          key={item.id}
+          className={`outline-item level-${item.level}`}
+          onClick={() =>
+            onSelect({
+              id: item.id,
+              pane: item.pane,
+              page: item.page,
+              rect: item.rect,
+              label: item.title,
+            })
+          }
+        >
+          p.{item.page} {item.title}
+        </button>
+      ))}
+    </section>
+  );
+}
+
+function FormulaList({
+  title,
+  formulas,
+  copiedId,
+  ocrLatexById,
+  ocrLoadingId,
+  onCopy,
+  onHighlight,
+  onImageOcr,
+}: {
+  title: string;
   formulas: FormulaCandidate[];
   copiedId: string | null;
+  ocrLatexById: Record<string, string>;
+  ocrLoadingId: string | null;
   onCopy: (formula: FormulaCandidate) => void;
-};
-
-function FormulaList({ formulas, copiedId, onCopy }: FormulaListProps) {
+  onHighlight: (target: {
+    id: string;
+    pane: PaneId;
+    page: number;
+    rect: FormulaCandidate["rect"];
+    label?: string;
+  }) => void;
+  onImageOcr: (formula: FormulaCandidate) => void;
+}) {
   return (
-    <div className="formula-list">
+    <section className="panel-section">
+      <h2>{title}</h2>
+
       {formulas.length === 0 && (
         <div className="empty-message">数式候補なし</div>
       )}
 
-      {formulas.map((formula) => (
-        <div key={formula.id} className="formula-card">
-          <div className="formula-meta">
-            p.{formula.page} / score {formula.score}
+      {formulas.map((formula) => {
+        const latex = ocrLatexById[formula.id] ?? formula.latex;
+
+        return (
+          <div key={formula.id} className="formula-card">
+            <button
+              className="formula-jump"
+              onClick={() =>
+                onHighlight({
+                  id: formula.id,
+                  pane: formula.pane,
+                  page: formula.page,
+                  rect: formula.rect,
+                  label: latex,
+                })
+              }
+            >
+              p.{formula.page} / score {formula.score}
+            </button>
+
+            <div className="formula-raw">{formula.rawText}</div>
+
+            <pre className="formula-latex">{latex}</pre>
+
+            <div className="formula-actions">
+              <button onClick={() => onCopy(formula)}>
+                {copiedId === formula.id ? "コピー済み" : "コピー"}
+              </button>
+
+              <button onClick={() => onImageOcr(formula)}>
+                {ocrLoadingId === formula.id ? "OCR中..." : "画像OCR"}
+              </button>
+            </div>
           </div>
-
-          <div className="formula-raw">{formula.rawText}</div>
-
-          <pre className="formula-latex">{formula.latex}</pre>
-
-          <button onClick={() => onCopy(formula)}>
-            {copiedId === formula.id ? "コピー済み" : "LaTeXコピー"}
-          </button>
-        </div>
-      ))}
-    </div>
+        );
+      })}
+    </section>
   );
 }

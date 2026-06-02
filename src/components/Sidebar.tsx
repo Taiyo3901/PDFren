@@ -552,13 +552,27 @@ function OutlineList({
     label?: string;
   }) => void;
 }) {
+  const sortedItems = [...items].sort((a, b) => {
+    if (a.page !== b.page) {
+      return a.page - b.page;
+    }
+
+    if (a.rect.y !== b.rect.y) {
+      return a.rect.y - b.rect.y;
+    }
+
+    return a.rect.x - b.rect.x;
+  });
+
   return (
     <section className="panel-section">
       <h2>{title}</h2>
 
-      {items.length === 0 && <div className="empty-message">目次候補なし</div>}
+      {sortedItems.length === 0 && (
+        <div className="empty-message">目次候補なし</div>
+      )}
 
-      {items.map((item) => (
+      {sortedItems.map((item) => (
         <button
           key={item.id}
           className={`outline-item level-${item.level}`}

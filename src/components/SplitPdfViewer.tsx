@@ -147,11 +147,25 @@ export function SplitPdfViewer() {
   ]);
 
   const outlineItems = useMemo<OutlineItem[]>(() => {
-    return [
-      ...extractOutlineItems("left", textItemsByPane.left),
-      ...extractOutlineItems("right", textItemsByPane.right),
-    ];
-  }, [textItemsByPane.left, textItemsByPane.right]);
+  return [
+    ...extractOutlineItems("left", textItemsByPane.left),
+    ...extractOutlineItems("right", textItemsByPane.right),
+  ].sort((a, b) => {
+    if (a.pane !== b.pane) {
+      return a.pane === "left" ? -1 : 1;
+    }
+
+    if (a.page !== b.page) {
+      return a.page - b.page;
+    }
+
+    if (a.rect.y !== b.rect.y) {
+      return a.rect.y - b.rect.y;
+    }
+
+    return a.rect.x - b.rect.x;
+  });
+}, [textItemsByPane.left, textItemsByPane.right]);
 
   const handleDividerPointerDown = (
     event: React.PointerEvent<HTMLDivElement>

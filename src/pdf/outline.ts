@@ -68,7 +68,9 @@ export function extractOutlineItems(
     if (score < 4) continue;
 
     results.push({
-      id: `${pane}-outline-${line.page}-${line.x.toFixed(1)}-${line.y.toFixed(1)}-${text}`,
+      id: `${pane}-outline-${line.page}-${line.x.toFixed(1)}-${line.y.toFixed(
+        1
+      )}-${text}`,
       pane,
       page: line.page,
       title: text,
@@ -83,5 +85,16 @@ export function extractOutlineItems(
     });
   }
 
-  return results;
+  // ✅ ページ順 → ページ内の上から下 → 左から右
+  return results.sort((a, b) => {
+    if (a.page !== b.page) {
+      return a.page - b.page;
+    }
+
+    if (a.rect.y !== b.rect.y) {
+      return a.rect.y - b.rect.y;
+    }
+
+    return a.rect.x - b.rect.x;
+  });
 }

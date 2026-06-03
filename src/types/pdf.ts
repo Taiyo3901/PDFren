@@ -54,6 +54,7 @@ export type HighlightTarget = {
   page: number;
   rect: PdfRect;
   label?: string;
+  source?: "search" | "outline" | "formula";
 };
 
 export type OcrResult = {

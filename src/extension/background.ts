@@ -6,7 +6,7 @@
  * @param {string | undefined} url
  * @returns {boolean}
  */
-const isPdfUrl = (url) => {
+const isPdfUrl = (url: string | undefined) => {
   if (!url) return false;
 
   try {
@@ -44,7 +44,11 @@ const isPdfUrl = (url) => {
  * @param {chrome.tabs.Tab} tab
  * @returns {void}
  */
-const handleTabUpdated = (tabId, changeInfo, tab) => {
+const handleTabUpdated = (
+  tabId: number,
+  changeInfo: { status?: string },
+  tab: chrome.tabs.Tab
+) => {
   if (changeInfo.status !== "loading") return;
   if (!tab.url) return;
 

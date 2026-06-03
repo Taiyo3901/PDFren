@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { pdfjsLib } from "../lib/pdfjs";
 import { PdfPage } from "./PdfPage";
 import type { PaneId, PdfTextItem } from "../types/pdf";
 import { useViewerStore } from "../store/viewerStore";
+import { useHighlightStore } from "../store/highlightStore";
 
 type PdfPaneProps = {
   pane: PaneId;
@@ -25,6 +26,8 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
   const setPageNumber = useViewerStore((state) => state.setPageNumber);
   const setUserScale = useViewerStore((state) => state.setUserScale);
   const setFitScale = useViewerStore((state) => state.setFitScale);
+  const activeHighlight = useHighlightStore((state) => state.activeHighlight);
+  const clearHighlight = useHighlightStore((state) => state.clearHighlight);
 
   const containerRef = useRef<HTMLElement | null>(null);
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -182,6 +185,39 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
     container.scrollTop = Math.max(0, targetTop);
   };
 
+  const scrollToPageWhenReady = useCallback(
+    (pageNumber: number, behavior: ScrollBehavior, maxAttempts = 30) => {
+      let attempts = 0;
+
+      const tryScroll = () => {
+        const target = pageRefs.current[pageNumber];
+
+        if (!target) {
+          if (attempts < maxAttempts) {
+            attempts += 1;
+            window.requestAnimationFrame(tryScroll);
+          }
+
+          return;
+        }
+
+        if (target.offsetHeight <= 0 && attempts < maxAttempts) {
+          attempts += 1;
+          window.requestAnimationFrame(tryScroll);
+          return;
+        }
+
+        target.scrollIntoView({
+          block: "start",
+          behavior,
+        });
+      };
+
+      window.requestAnimationFrame(tryScroll);
+    },
+    []
+  );
+
   /**
    * 自動縮尺:
    * - 初回表示時には、PDFがペインより大きすぎる場合のみ縮小
@@ -244,18 +280,11 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
     if (!pdf) return;
     if (initialScrollDoneRef.current) return;
 
-    const target = pageRefs.current[paneState.pageNumber];
-
-    if (!target) return;
-
-    target.scrollIntoView({
-      block: "start",
-      behavior: "auto",
-    });
+    scrollToPageWhenReady(paneState.pageNumber, "auto");
 
     initialScrollDoneRef.current = true;
-    suppressPageDetectUntilRef.current = Date.now() + 250;
-  }, [pdf, paneState.pageNumber]);
+    suppressPageDetectUntilRef.current = Date.now() + 900;
+  }, [pdf, paneState.pageNumber, scrollToPageWhenReady]);
 
   // 明示的ページジャンプ時のみscrollIntoView
   useEffect(() => {
@@ -267,17 +296,10 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
 
     lastJumpRequestIdRef.current = paneState.jumpRequestId;
 
-    const target = pageRefs.current[paneState.pageNumber];
+    scrollToPageWhenReady(paneState.pageNumber, "smooth");
 
-    if (!target) return;
-
-    target.scrollIntoView({
-      block: "start",
-      behavior: "smooth",
-    });
-
-    suppressPageDetectUntilRef.current = Date.now() + 500;
-  }, [pdf, paneState.jumpRequestId, paneState.pageNumber]);
+    suppressPageDetectUntilRef.current = Date.now() + 900;
+  }, [pdf, paneState.jumpRequestId, paneState.pageNumber, scrollToPageWhenReady]);
 
   // ズーム後に見ていた位置を復元
   useEffect(() => {
@@ -314,6 +336,29 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
     }
   };
 
+  const clearOutlineHighlightIfPageIsGone = () => {
+    if (!activeHighlight || activeHighlight.source !== "outline") return;
+    if (activeHighlight.pane !== pane) return;
+
+    const container = containerRef.current;
+    const pageElement = pageRefs.current[activeHighlight.page];
+
+    if (!container || !pageElement) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const pageRect = pageElement.getBoundingClientRect();
+    const visibleTop = Math.max(pageRect.top, containerRect.top);
+    const visibleBottom = Math.min(pageRect.bottom, containerRect.bottom);
+    const visibleLeft = Math.max(pageRect.left, containerRect.left);
+    const visibleRight = Math.min(pageRect.right, containerRect.right);
+    const isVisible =
+      visibleBottom > visibleTop + 1 && visibleRight > visibleLeft + 1;
+
+    if (!isVisible) {
+      clearHighlight();
+    }
+  };
+
   const handleScroll = () => {
     if (tickingRef.current) return;
 
@@ -321,6 +366,7 @@ export function PdfPane({ pane, debugTextLayer, onTextItems }: PdfPaneProps) {
 
     window.requestAnimationFrame(() => {
       updateDominantVisiblePage();
+      clearOutlineHighlightIfPageIsGone();
       tickingRef.current = false;
     });
   };

@@ -9,6 +9,25 @@ const MATH_SYMBOL_REGEX = /[=+\-−×÷*/^_√∫∑ΣΠπ∞≈≠≤≥<>±∂
 const LATIN_VARIABLE_REGEX = /[a-zA-Z]\s*[=+\-−×÷*/^_]/;
 const NUMBER_OPERATOR_REGEX = /\d+\s*[=+\-−×÷*/^_]\s*\d+/;
 const FUNCTION_REGEX = /\b(sin|cos|tan|log|ln|lim|max|min|exp)\b/i;
+const STRICT_MATH_SYMBOL_REGEX =
+  /[=+\-−×÷*/^_∫∑ΣΠ√∞≈≠≤≥±∂∆Δ∇π<>()[\]{}]/u;
+const CALCULUS_REGEX =
+  /(\b(d|D)\s*\/\s*d[a-zA-Z]\b|\b(d|D|∂)\s*[a-zA-Z]\s*\/\s*(d|D|∂)\s*[a-zA-Z]\b|∫|∂|\blim\b)/i;
+const COMMON_TEXT_WORDS = new Set([
+  "and",
+  "are",
+  "can",
+  "for",
+  "from",
+  "into",
+  "let",
+  "then",
+  "that",
+  "the",
+  "this",
+  "where",
+  "with",
+]);
 const GREEK_REGEX = /[αβγδθλμσφωΩΓΔΛ]/i;
 
 function normalizeText(text: string): string {
@@ -20,6 +39,62 @@ function normalizeFormulaText(text: string): string {
     .replaceAll("−", "-")
     .replaceAll("×", "*")
     .replaceAll("÷", "/");
+}
+
+function countTextWords(text: string): number {
+  const words = text.match(/[A-Za-z]{3,}/g) ?? [];
+
+  return words.filter((word) => {
+    const lower = word.toLowerCase();
+    return !COMMON_TEXT_WORDS.has(lower) && !FUNCTION_REGEX.test(lower);
+  }).length;
+}
+
+function isProbablyProse(text: string): boolean {
+  const normalized = normalizeFormulaText(text);
+  const wordCount = countTextWords(normalized);
+  const hasStrongMath =
+    STRICT_MATH_SYMBOL_REGEX.test(normalized) ||
+    CALCULUS_REGEX.test(normalized) ||
+    NUMBER_OPERATOR_REGEX.test(normalized);
+
+  if (wordCount >= 4 && !hasStrongMath) return true;
+  if (wordCount >= 6) return true;
+  if (/[。.!?]$/.test(normalized) && wordCount >= 3) return true;
+
+  return false;
+}
+
+function isSingleVariable(text: string): boolean {
+  return /^[a-zA-Z](?:['′])?$/.test(text.trim());
+}
+
+function isMathToken(text: string): boolean {
+  const normalized = normalizeFormulaText(text);
+
+  if (!normalized) return false;
+  if (STRICT_MATH_SYMBOL_REGEX.test(normalized)) return true;
+  if (CALCULUS_REGEX.test(normalized)) return true;
+  if (FUNCTION_REGEX.test(normalized)) return true;
+  if (GREEK_REGEX.test(normalized)) return true;
+  if (isSingleVariable(normalized)) return true;
+  if (/^\d+(?:\.\d+)?$/.test(normalized)) return true;
+  if (/^[,.;:|]+$/.test(normalized)) return true;
+  if (/^[a-zA-Z]{2,}$/.test(normalized)) return false;
+
+  return /^[a-zA-Z0-9()[\]{}+\-−×÷*/^_=<>.,]+$/.test(normalized);
+}
+
+function isCoreMathToken(text: string): boolean {
+  const normalized = normalizeFormulaText(text);
+
+  return (
+    STRICT_MATH_SYMBOL_REGEX.test(normalized) ||
+    CALCULUS_REGEX.test(normalized) ||
+    FUNCTION_REGEX.test(normalized) ||
+    LATIN_VARIABLE_REGEX.test(normalized) ||
+    NUMBER_OPERATOR_REGEX.test(normalized)
+  );
 }
 
 function getMedian(values: number[]): number {
@@ -161,8 +236,65 @@ function escapeLatexText(text: string): string {
     .replace(/&/g, "\\&");
 }
 
+function applyCalculusReplacements(text: string): string {
+  let result = text;
+
+  result = result.replace(
+    /\b(d|D)\s*([a-zA-Z])\s*\/\s*d\s*([a-zA-Z])\b/g,
+    "\\frac{d $2}{d $3}"
+  );
+  result = result.replace(
+    /∂\s*([a-zA-Z])\s*\/\s*∂\s*([a-zA-Z])/g,
+    "\\frac{\\partial $1}{\\partial $2}"
+  );
+  result = result.replace(
+    /\b(d|D)\s*\/\s*d\s*([a-zA-Z])\b/g,
+    "\\frac{d}{d $2}"
+  );
+  result = result.replace(
+    /∂\s*\/\s*∂\s*([a-zA-Z])/g,
+    "\\frac{\\partial}{\\partial $1}"
+  );
+  result = result.replace(
+    /\blim\s*_\s*([^=]+)\s*->\s*([^\s]+)/g,
+    "\\lim_{$1 \\to $2}"
+  );
+  result = result.replace(/\b([dD])([a-zA-Z])\b/g, "\\, d$2");
+
+  return result;
+}
+
 function applySymbolReplacements(text: string): string {
   const replacements: Array<[RegExp, string]> = [
+    [/∫/g, "\\int"],
+    [/∑/g, "\\sum"],
+    [/Σ/g, "\\Sigma"],
+    [/Π/g, "\\Pi"],
+    [/√\s*([a-zA-Z0-9]+)/g, "\\sqrt{$1}"],
+    [/∞/g, "\\infty"],
+    [/≈/g, "\\approx"],
+    [/≠/g, "\\neq"],
+    [/≤/g, "\\leq"],
+    [/≥/g, "\\geq"],
+    [/±/g, "\\pm"],
+    [/∂/g, "\\partial"],
+    [/[∆Δ]/g, "\\Delta"],
+    [/∇/g, "\\nabla"],
+    [/π/g, "\\pi"],
+    [/α/g, "\\alpha"],
+    [/β/g, "\\beta"],
+    [/γ/g, "\\gamma"],
+    [/δ/g, "\\delta"],
+    [/ε/g, "\\epsilon"],
+    [/θ/g, "\\theta"],
+    [/λ/g, "\\lambda"],
+    [/μ/g, "\\mu"],
+    [/σ/g, "\\sigma"],
+    [/φ/g, "\\phi"],
+    [/ω/g, "\\omega"],
+    [/×/g, "\\times"],
+    [/÷/g, "\\div"],
+    [/−/g, "-"],
     [/π/g, "\\pi"],
     [/Σ/g, "\\Sigma"],
     [/∑/g, "\\sum"],
@@ -241,7 +373,9 @@ function lineItemsToLatex(items: PdfTextItem[]): string {
       latex += " ";
     }
 
-    const converted = applySymbolReplacements(escapeLatexText(raw));
+    const converted = applySymbolReplacements(
+      applyCalculusReplacements(escapeLatexText(raw))
+    );
 
     if (isSuperscript && latex.length > 0) {
       latex += `^{${converted}}`;
@@ -258,6 +392,93 @@ function lineItemsToLatex(items: PdfTextItem[]): string {
   latex = latex.replace(/([a-zA-Z0-9)\]}])_([a-zA-Z0-9]+)/g, "$1_{$2}");
 
   return latex.trim();
+}
+
+function getGap(left: PdfTextItem, right: PdfTextItem): number {
+  return right.x - (left.x + left.width);
+}
+
+function getFormulaItemGroups(line: TextLine): PdfTextItem[][] {
+  const items = [...line.items].sort((a, b) => a.x - b.x);
+  const mathFlags = items.map((item) => isMathToken(item.str));
+  const coreFlags = items.map((item) => isCoreMathToken(item.str));
+  const ranges: Array<{ start: number; end: number }> = [];
+  const medianHeight = getMedian(items.map((item) => item.height)) || line.height || 10;
+
+  for (let index = 0; index < items.length; index += 1) {
+    if (!coreFlags[index]) continue;
+
+    let start = index;
+    let end = index;
+
+    while (start > 0) {
+      const gap = getGap(items[start - 1], items[start]);
+      const canInclude =
+        mathFlags[start - 1] &&
+        gap < medianHeight * 1.6 &&
+        !isProbablyProse(items[start - 1].str);
+
+      if (!canInclude) break;
+      start -= 1;
+    }
+
+    while (end < items.length - 1) {
+      const gap = getGap(items[end], items[end + 1]);
+      const canInclude =
+        mathFlags[end + 1] &&
+        gap < medianHeight * 1.6 &&
+        !isProbablyProse(items[end + 1].str);
+
+      if (!canInclude) break;
+      end += 1;
+    }
+
+    ranges.push({ start, end });
+  }
+
+  if (ranges.length === 0) {
+    const rawLine = normalizeFormulaText(line.text);
+
+    if (
+      !isProbablyProse(rawLine) &&
+      items.length <= 10 &&
+      items.filter((item) => isMathToken(item.str)).length >= Math.max(2, items.length - 1)
+    ) {
+      return [items];
+    }
+
+    return [];
+  }
+
+  const merged: Array<{ start: number; end: number }> = [];
+
+  for (const range of ranges.sort((a, b) => a.start - b.start)) {
+    const last = merged[merged.length - 1];
+
+    if (last && range.start <= last.end + 1) {
+      last.end = Math.max(last.end, range.end);
+    } else {
+      merged.push({ ...range });
+    }
+  }
+
+  return merged
+    .map((range) => items.slice(range.start, range.end + 1))
+    .filter((group) => group.length > 0);
+}
+
+function getItemsRect(items: PdfTextItem[]) {
+  const minX = Math.min(...items.map((item) => item.x));
+  const maxX = Math.max(...items.map((item) => item.x + item.width));
+  const minY = Math.min(...items.map((item) => item.y));
+  const maxY = Math.max(...items.map((item) => item.y + item.height));
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
 }
 
 function dedupeCandidates(candidates: FormulaCandidate[]): FormulaCandidate[] {
@@ -280,6 +501,7 @@ export function textToLatex(input: string): string {
   let text = normalizeFormulaText(input);
 
   text = escapeLatexText(text);
+  text = applyCalculusReplacements(text);
   text = applySymbolReplacements(text);
 
   text = text.replace(/([a-zA-Z0-9)\]}])\^([a-zA-Z0-9]+)/g, "$1^{$2}");
@@ -299,29 +521,31 @@ export function extractFormulaCandidates(
   const candidates: FormulaCandidate[] = [];
 
   for (const line of lines) {
-    const rawText = normalizeFormulaText(line.text);
-    const latex = lineItemsToLatex(line.items);
+    const groups = getFormulaItemGroups(line);
 
-    const score = scoreFormulaLine(rawText) + scoreFormulaLine(latex);
+    for (const group of groups) {
+      const rawText = normalizeFormulaText(joinLineItems(group));
+      const latex = lineItemsToLatex(group);
+      const rect = getItemsRect(group);
 
-    if (score >= 4) {
-      const candidate: FormulaCandidate = {
-        id: `${pane}-${page}-${line.x.toFixed(1)}-${line.y.toFixed(1)}-${rawText}`,
-        pane,
-        page,
-        rawText,
-        latex,
-        score,
-        rect: {
+      const score = scoreFormulaLine(rawText) + scoreFormulaLine(latex);
+
+      if (score >= 4) {
+        const candidate: FormulaCandidate = {
+          id: `${pane}-${page}-${rect.x.toFixed(1)}-${rect.y.toFixed(1)}-${rawText}`,
+          pane,
           page,
-          x: line.x,
-          y: line.y,
-          width: line.width,
-          height: line.height,
-        },
-      };
+          rawText,
+          latex,
+          score,
+          rect: {
+            page,
+            ...rect,
+          },
+        };
 
-      candidates.push(candidate);
+        candidates.push(candidate);
+      }
     }
   }
 

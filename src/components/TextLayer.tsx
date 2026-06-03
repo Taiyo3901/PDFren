@@ -21,6 +21,12 @@ type PositionedTextItem = {
   isBold?: boolean;
 };
 
+type TextItemRange = {
+  item: PositionedTextItem;
+  start: number;
+  end: number;
+};
+
 function getTextContentSignature(textContent: any): string {
   const items = textContent?.items as any[] | undefined;
 
@@ -47,6 +53,144 @@ function isBoldFont(fontName?: string, fontFamily?: string): boolean {
     source.includes("gothicbbb") ||
     source.includes("gothic")
   );
+}
+
+const URL_PATTERN_GLOBAL = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+const TRAILING_URL_PUNCTUATION = /[),.;:!?]+$/;
+
+function normalizeClickableUrl(rawText: string): string | null {
+  const rawUrl = rawText.replace(TRAILING_URL_PUNCTUATION, "");
+
+  if (!rawUrl) return null;
+
+  return rawUrl.startsWith("http://") || rawUrl.startsWith("https://")
+    ? rawUrl
+    : `https://${rawUrl}`;
+}
+
+function createLinkOverlay(
+  href: string,
+  ranges: TextItemRange[],
+  start: number,
+  end: number,
+  debug: boolean
+): HTMLAnchorElement | null {
+  const rects = ranges
+    .map((range) => {
+      const overlapStart = Math.max(start, range.start);
+      const overlapEnd = Math.min(end, range.end);
+
+      if (overlapStart >= overlapEnd || range.item.str.length === 0) {
+        return null;
+      }
+
+      const charWidth = range.item.width / range.item.str.length;
+      const localStart = overlapStart - range.start;
+      const localEnd = overlapEnd - range.start;
+      const x = range.item.x + charWidth * localStart;
+      const width = Math.max(1, charWidth * (localEnd - localStart));
+
+      return {
+        x,
+        y: range.item.y,
+        right: x + width,
+        bottom: range.item.y + range.item.height,
+      };
+    })
+    .filter((rect): rect is { x: number; y: number; right: number; bottom: number } => {
+      return rect !== null;
+    });
+
+  if (rects.length === 0) return null;
+
+  const left = Math.min(...rects.map((rect) => rect.x));
+  const top = Math.min(...rects.map((rect) => rect.y));
+  const right = Math.max(...rects.map((rect) => rect.right));
+  const bottom = Math.max(...rects.map((rect) => rect.bottom));
+  const link = document.createElement("a");
+
+  link.href = href;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.title = href;
+  link.setAttribute("aria-label", href);
+
+  link.style.position = "absolute";
+  link.style.left = `${left}px`;
+  link.style.top = `${top}px`;
+  link.style.width = `${Math.max(1, right - left)}px`;
+  link.style.height = `${Math.max(1, bottom - top)}px`;
+  link.style.display = "block";
+  link.style.zIndex = "12";
+  link.style.pointerEvents = "auto";
+  link.style.cursor = "pointer";
+  link.style.background = debug ? "rgba(37, 99, 235, 0.18)" : "transparent";
+  link.style.outline = debug ? "1px solid rgba(37, 99, 235, 0.6)" : "none";
+
+  link.addEventListener("mousedown", (event) => {
+    event.stopPropagation();
+  });
+
+  return link;
+}
+
+function appendUrlLinkOverlays(
+  fragment: DocumentFragment,
+  positionedItems: PositionedTextItem[],
+  debug: boolean
+) {
+  const lines: PositionedTextItem[][] = [];
+
+  for (const item of positionedItems) {
+    const lastLine = lines[lines.length - 1];
+    const lastItem = lastLine?.[lastLine.length - 1];
+    const yTolerance = Math.max(4, item.height * 0.45);
+
+    if (lastLine && lastItem && Math.abs(lastItem.y - item.y) <= yTolerance) {
+      lastLine.push(item);
+    } else {
+      lines.push([item]);
+    }
+  }
+
+  for (const line of lines) {
+    const sortedLine = [...line].sort((a, b) => a.x - b.x);
+    const ranges: TextItemRange[] = [];
+    let lineText = "";
+
+    for (const item of sortedLine) {
+      const start = lineText.length;
+      lineText += item.str;
+      ranges.push({
+        item,
+        start,
+        end: lineText.length,
+      });
+    }
+
+    for (const match of lineText.matchAll(URL_PATTERN_GLOBAL)) {
+      const matchText = match[0];
+      const matchStart = match.index ?? 0;
+      const href = normalizeClickableUrl(matchText);
+
+      if (!href) continue;
+
+      const trimmedLength = href.startsWith("https://") && matchText.startsWith("www.")
+        ? href.length - "https://".length
+        : href.length;
+      const overlay = createLinkOverlay(
+        href,
+        ranges,
+        matchStart,
+        matchStart + trimmedLength,
+        debug
+      );
+
+      if (overlay) {
+        fragment.appendChild(overlay);
+      }
+    }
+  }
 }
 
 export function TextLayer({
@@ -193,6 +337,7 @@ export function TextLayer({
       span.style.webkitUserSelect = "text";
       span.style.pointerEvents = "auto";
       span.style.cursor = "text";
+      span.style.textDecoration = "none";
 
       if (debug) {
         span.style.color = item.isBold ? "blue" : "red";
@@ -209,6 +354,8 @@ export function TextLayer({
 
       fragment.appendChild(span);
     }
+
+    appendUrlLinkOverlays(fragment, positionedItems, debug);
 
     container.appendChild(fragment);
 

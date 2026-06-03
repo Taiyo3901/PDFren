@@ -106,13 +106,6 @@ export function SplitPdfViewer() {
   const hasRightPdf = Boolean(panes.right.pdfUrl);
   const isSplitMode = hasLeftPdf && hasRightPdf;
 
-  const visiblePanes: PaneId[] = useMemo(() => {
-    if (hasLeftPdf && hasRightPdf) return ["left", "right"];
-    if (hasLeftPdf) return ["left"];
-    if (hasRightPdf) return ["right"];
-    return [];
-  }, [hasLeftPdf, hasRightPdf]);
-
   const formulas = useMemo<FormulaCandidate[]>(() => {
     const result: FormulaCandidate[] = [];
 
@@ -147,25 +140,25 @@ export function SplitPdfViewer() {
   ]);
 
   const outlineItems = useMemo<OutlineItem[]>(() => {
-  return [
-    ...extractOutlineItems("left", textItemsByPane.left),
-    ...extractOutlineItems("right", textItemsByPane.right),
-  ].sort((a, b) => {
-    if (a.pane !== b.pane) {
-      return a.pane === "left" ? -1 : 1;
-    }
+    return [
+      ...extractOutlineItems("left", textItemsByPane.left),
+      ...extractOutlineItems("right", textItemsByPane.right),
+    ].sort((a, b) => {
+      if (a.pane !== b.pane) {
+        return a.pane === "left" ? -1 : 1;
+      }
 
-    if (a.page !== b.page) {
-      return a.page - b.page;
-    }
+      if (a.page !== b.page) {
+        return a.page - b.page;
+      }
 
-    if (a.rect.y !== b.rect.y) {
-      return a.rect.y - b.rect.y;
-    }
+      if (a.rect.y !== b.rect.y) {
+        return a.rect.y - b.rect.y;
+      }
 
-    return a.rect.x - b.rect.x;
-  });
-}, [textItemsByPane.left, textItemsByPane.right]);
+      return a.rect.x - b.rect.x;
+    });
+  }, [textItemsByPane.left, textItemsByPane.right]);
 
   const handleDividerPointerDown = (
     event: React.PointerEvent<HTMLDivElement>
@@ -228,40 +221,34 @@ export function SplitPdfViewer() {
             : undefined
         }
       >
-        {visiblePanes.length === 0 && (
+        {!hasLeftPdf && !hasRightPdf && (
           <div className="no-pdf-message">PDFを読み込んでください</div>
         )}
 
-        {!isSplitMode &&
-          visiblePanes.map((pane) => (
-            <PdfPane
-              key={pane}
-              pane={pane}
-              debugTextLayer={debugTextLayer}
-              onTextItems={handleTextItems}
-            />
-          ))}
+        {hasLeftPdf && (
+          <PdfPane
+            key="left"
+            pane="left"
+            debugTextLayer={debugTextLayer}
+            onTextItems={handleTextItems}
+          />
+        )}
 
         {isSplitMode && (
-          <>
-            <PdfPane
-              pane="left"
-              debugTextLayer={debugTextLayer}
-              onTextItems={handleTextItems}
-            />
+          <div
+            className="split-divider"
+            onPointerDown={handleDividerPointerDown}
+            title="ドラッグして表示幅を調整"
+          />
+        )}
 
-            <div
-              className="split-divider"
-              onPointerDown={handleDividerPointerDown}
-              title="ドラッグして表示幅を調整"
-            />
-
-            <PdfPane
-              pane="right"
-              debugTextLayer={debugTextLayer}
-              onTextItems={handleTextItems}
-            />
-          </>
+        {hasRightPdf && (
+          <PdfPane
+            key="right"
+            pane="right"
+            debugTextLayer={debugTextLayer}
+            onTextItems={handleTextItems}
+          />
         )}
       </main>
     </div>

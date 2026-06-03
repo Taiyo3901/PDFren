@@ -37,7 +37,7 @@ const initialPaneState: PaneState = {
   title: "未読み込み",
   pageNumber: 1,
   totalPages: 0,
-  userScale: 1.15,
+  userScale: 1,
   fitScale: MAX_SCALE,
   jumpRequestId: 0,
 };
@@ -74,7 +74,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
           title,
           pageNumber: 1,
           totalPages: 0,
-          userScale: 1.15,
+          userScale: 1,
           fitScale: MAX_SCALE,
           jumpRequestId: state.panes[pane].jumpRequestId + 1,
         },

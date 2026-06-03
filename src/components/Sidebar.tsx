@@ -1,7 +1,8 @@
-import type { ChangeEvent, ReactNode } from "react";
+import type { ChangeEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type {
   FormulaCandidate,
+  HighlightTarget,
   OutlineItem,
   PaneId,
   PdfTextItem,
@@ -61,6 +62,7 @@ export function Sidebar({
   );
 
   const setHighlight = useHighlightStore((state) => state.setHighlight);
+  const clearHighlight = useHighlightStore((state) => state.clearHighlight);
 
   const searchResults = useMemo<SearchResult[]>(() => {
     if (!searchQuery.trim()) return [];
@@ -85,6 +87,14 @@ export function Sidebar({
     };
   }, [outlineItems]);
 
+  const selectTab = (nextTab: SidebarTab) => {
+    if (nextTab !== tab) {
+      clearHighlight();
+    }
+
+    setTab(nextTab);
+  };
+
   const handleFileChange = (
     pane: PaneId,
     event: ChangeEvent<HTMLInputElement>
@@ -105,6 +115,7 @@ export function Sidebar({
     page: number;
     rect: { page: number; x: number; y: number; width: number; height: number };
     label?: string;
+    source?: HighlightTarget["source"];
   }) => {
     jumpToPage(target.pane, target.page);
 
@@ -114,8 +125,13 @@ export function Sidebar({
       page: target.page,
       rect: target.rect,
       label: target.label,
+      source: target.source,
     });
   };
+
+  useEffect(() => {
+    clearHighlight();
+  }, [clearHighlight, searchQuery]);
 
   const copyOne = async (formula: FormulaCandidate) => {
     const latex = ocrLatexById[formula.id] ?? formula.latex;
@@ -221,35 +237,35 @@ export function Sidebar({
       <div className="sidebar-tabs five-tabs">
         <button
           className={tab === "controls" ? "active" : ""}
-          onClick={() => setTab("controls")}
+          onClick={() => selectTab("controls")}
         >
           操作
         </button>
 
         <button
           className={tab === "search" ? "active" : ""}
-          onClick={() => setTab("search")}
+          onClick={() => selectTab("search")}
         >
           検索
         </button>
 
         <button
           className={tab === "outline" ? "active" : ""}
-          onClick={() => setTab("outline")}
+          onClick={() => selectTab("outline")}
         >
           目次
         </button>
 
         <button
           className={tab === "latex" ? "active" : ""}
-          onClick={() => setTab("latex")}
+          onClick={() => selectTab("latex")}
         >
           LaTeX
         </button>
 
         <button
           className={tab === "qa" ? "active" : ""}
-          onClick={() => setTab("qa")}
+          onClick={() => selectTab("qa")}
         >
           Q&A
         </button>
@@ -320,6 +336,7 @@ export function Sidebar({
                     page: result.page,
                     rect: result.rect,
                     label: result.text,
+                    source: "search",
                   })
                 }
               >
@@ -338,13 +355,17 @@ export function Sidebar({
           <OutlineList
             title="左ペイン"
             items={outlineByPane.left}
-            onSelect={jumpAndHighlight}
+            onSelect={(target) =>
+              jumpAndHighlight({ ...target, source: "outline" })
+            }
           />
 
           <OutlineList
             title="右ペイン"
             items={outlineByPane.right}
-            onSelect={jumpAndHighlight}
+            onSelect={(target) =>
+              jumpAndHighlight({ ...target, source: "outline" })
+            }
           />
         </div>
       )}
@@ -364,7 +385,9 @@ export function Sidebar({
             ocrLatexById={ocrLatexById}
             ocrLoadingId={ocrLoadingId}
             onCopy={copyOne}
-            onHighlight={jumpAndHighlight}
+            onHighlight={(target) =>
+              jumpAndHighlight({ ...target, source: "formula" })
+            }
             onImageOcr={runFormulaImageOcr}
           />
 
@@ -375,7 +398,9 @@ export function Sidebar({
             ocrLatexById={ocrLatexById}
             ocrLoadingId={ocrLoadingId}
             onCopy={copyOne}
-            onHighlight={jumpAndHighlight}
+            onHighlight={(target) =>
+              jumpAndHighlight({ ...target, source: "formula" })
+            }
             onImageOcr={runFormulaImageOcr}
           />
         </div>

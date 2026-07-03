@@ -3,6 +3,8 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./styles/index.css";
 import "./styles/pdf_analyzer_unified_ui.css";
+import "./styles/pdf_only_fullscreen_slide_mode.css";
+import "./styles/sidebar_top_popover_override_v2.css";
 
 const rootElement = document.getElementById("root");
 

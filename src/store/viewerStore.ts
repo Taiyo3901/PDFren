@@ -33,35 +33,26 @@ type ViewerState = {
 
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 6;
+const DEFAULT_SCALE = 1.15;
 
 const initialPaneState: PaneState = {
   pdfUrl: null,
   title: "未読み込み",
   pageNumber: 1,
   totalPages: 0,
-  userScale: 1.15,
-  fitScale: MAX_SCALE,
+  userScale: DEFAULT_SCALE,
+  fitScale: DEFAULT_SCALE,
   jumpRequestId: 0,
 };
 
 function clampScale(scale: number): number {
-  return Math.min(
-    MAX_SCALE,
-    Math.max(MIN_SCALE, Number(scale.toFixed(2)))
-  );
+  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, Number(scale.toFixed(2))));
 }
 
 function clampPage(pageNumber: number, totalPages: number): number {
-  if (!Number.isFinite(pageNumber)) {
-    return 1;
-  }
-
+  if (!Number.isFinite(pageNumber)) return 1;
   const page = Math.floor(pageNumber);
-
-  if (totalPages > 0) {
-    return Math.min(Math.max(1, page), totalPages);
-  }
-
+  if (totalPages > 0) return Math.min(Math.max(1, page), totalPages);
   return Math.max(1, page);
 }
 
@@ -81,8 +72,8 @@ export const useViewerStore = create<ViewerState>((set) => ({
           title,
           pageNumber: 1,
           totalPages: 0,
-          userScale: 1.15,
-          fitScale: MAX_SCALE,
+          userScale: DEFAULT_SCALE,
+          fitScale: DEFAULT_SCALE,
           jumpRequestId: state.panes[pane].jumpRequestId + 1,
         },
       },
@@ -92,9 +83,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
     set((state) => ({
       panes: {
         ...state.panes,
-        [pane]: {
-          ...initialPaneState,
-        },
+        [pane]: { ...initialPaneState },
       },
     })),
 
@@ -102,27 +91,14 @@ export const useViewerStore = create<ViewerState>((set) => ({
     set((state) => {
       const current = state.panes[pane];
       const safePage = clampPage(pageNumber, current.totalPages);
-
-      if (current.pageNumber === safePage) {
-        return state;
-      }
-
-      return {
-        panes: {
-          ...state.panes,
-          [pane]: {
-            ...current,
-            pageNumber: safePage,
-          },
-        },
-      };
+      if (current.pageNumber === safePage) return state;
+      return { panes: { ...state.panes, [pane]: { ...current, pageNumber: safePage } } };
     }),
 
   jumpToPage: (pane, pageNumber) =>
     set((state) => {
       const current = state.panes[pane];
       const safePage = clampPage(pageNumber, current.totalPages);
-
       return {
         panes: {
           ...state.panes,
@@ -139,7 +115,6 @@ export const useViewerStore = create<ViewerState>((set) => ({
     set((state) => {
       const current = state.panes[pane];
       const safeTotal = Math.max(0, totalPages);
-
       return {
         panes: {
           ...state.panes,
@@ -155,71 +130,29 @@ export const useViewerStore = create<ViewerState>((set) => ({
   zoomIn: (pane) =>
     set((state) => {
       const current = state.panes[pane];
-
-      return {
-        panes: {
-          ...state.panes,
-          [pane]: {
-            ...current,
-            userScale: clampScale(current.userScale + 0.15),
-          },
-        },
-      };
+      return { panes: { ...state.panes, [pane]: { ...current, userScale: clampScale(current.userScale + 0.15) } } };
     }),
 
   zoomOut: (pane) =>
     set((state) => {
       const current = state.panes[pane];
-
-      return {
-        panes: {
-          ...state.panes,
-          [pane]: {
-            ...current,
-            userScale: clampScale(current.userScale - 0.15),
-          },
-        },
-      };
+      return { panes: { ...state.panes, [pane]: { ...current, userScale: clampScale(current.userScale - 0.15) } } };
     }),
 
   setUserScale: (pane, scale) =>
     set((state) => {
       const current = state.panes[pane];
       const nextScale = clampScale(scale);
-
-      if (current.userScale === nextScale) {
-        return state;
-      }
-
-      return {
-        panes: {
-          ...state.panes,
-          [pane]: {
-            ...current,
-            userScale: nextScale,
-          },
-        },
-      };
+      if (current.userScale === nextScale) return state;
+      return { panes: { ...state.panes, [pane]: { ...current, userScale: nextScale } } };
     }),
 
   setFitScale: (pane, fitScale) =>
     set((state) => {
       const current = state.panes[pane];
       const nextFitScale = clampScale(fitScale);
-
-      if (current.fitScale === nextFitScale) {
-        return state;
-      }
-
-      return {
-        panes: {
-          ...state.panes,
-          [pane]: {
-            ...current,
-            fitScale: nextFitScale,
-          },
-        },
-      };
+      if (current.fitScale === nextFitScale) return state;
+      return { panes: { ...state.panes, [pane]: { ...current, fitScale: nextFitScale } } };
     }),
 
   openLeftPdfOnRightDifferentPage: () =>
@@ -227,9 +160,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
       const leftPane = state.panes.left;
       const rightPane = state.panes.right;
 
-      if (!leftPane.pdfUrl) {
-        return state;
-      }
+      if (!leftPane.pdfUrl) return state;
 
       const leftCurrentPage = leftPane.pageNumber;
       const rightPage = leftCurrentPage;
@@ -237,12 +168,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
       return {
         panes: {
           ...state.panes,
-
-          left: {
-            ...leftPane,
-            pageNumber: leftCurrentPage,
-          },
-
+          left: { ...leftPane, pageNumber: leftCurrentPage },
           right: {
             ...rightPane,
             pdfUrl: leftPane.pdfUrl,
@@ -266,23 +192,14 @@ export const useViewerStore = create<ViewerState>((set) => ({
         panes: {
           left: {
             ...rightPane,
-
-            // 入れ替え先、つまり左ペイン側の倍率を使う
             userScale: leftPane.userScale,
             fitScale: leftPane.fitScale,
-
-            // ページ移動を確実に反映
             jumpRequestId: leftPane.jumpRequestId + 1,
           },
-
           right: {
             ...leftPane,
-
-            // 入れ替え先、つまり右ペイン側の倍率を使う
             userScale: rightPane.userScale,
             fitScale: rightPane.fitScale,
-
-            // ページ移動を確実に反映
             jumpRequestId: rightPane.jumpRequestId + 1,
           },
         },

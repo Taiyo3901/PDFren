@@ -15,7 +15,6 @@ export type PdfTextItem = {
   width: number;
   height: number;
   page: number;
-
   fontName?: string;
   fontFamily?: string;
   isBold?: boolean;
@@ -76,29 +75,38 @@ export type OcrResult = {
 };
 
 export type PdfTextAlign = "left" | "center" | "right";
-
 export type PdfTextFontWeight = "normal" | "bold";
 
 export type PdfTextBox = {
   id: string;
   pane: PaneId;
   page: number;
-
   x: number;
   y: number;
   width: number;
   height: number;
-
   text: string;
   fontSize: number;
   color: string;
-
-  textAlign?: "left" | "center" | "right";
-  fontWeight?: "normal" | "bold";
+  textAlign?: PdfTextAlign;
+  fontWeight?: PdfTextFontWeight;
   italic?: boolean;
   underline?: boolean;
   backgroundColor?: string;
-  opacity?: number
+  opacity?: number;
+};
+
+export type PdfImageAnnotation = {
+  id: string;
+  pane: PaneId;
+  page: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  imageDataUrl: string;
+  sourcePane?: PaneId;
+  sourcePage?: number;
 };
 
 export type PdfPageViewportInfo = {

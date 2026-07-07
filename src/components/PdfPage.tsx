@@ -4,6 +4,8 @@ import { HighlightOverlay } from "./HighlightOverlay";
 import { TextBoxLayer } from "./TextBoxLayer";
 import type { PaneId, PdfTextItem } from "../types/pdf";
 import { FreehandDrawLayer } from "./FreehandDrawLayer";
+import { PdfAreaSelectionLayer } from "./PdfAreaSelectionLayer";
+import { PdfImageAnnotationLayer } from "./PdfImageAnnotationLayer";
 
 type PdfPageProps = {
   pane: PaneId;
@@ -172,6 +174,25 @@ function PdfPageComponent({
       )}
 
       <HighlightOverlay pane={pane} pageNumber={pageNumber} />
+
+      {viewport && (
+        <PdfImageAnnotationLayer
+          pane={pane}
+          pageNumber={pageNumber}
+          viewportWidth={viewport.width}
+          viewportHeight={viewport.height}
+        />
+      )}
+
+      {viewport && (
+        <PdfAreaSelectionLayer
+          pane={pane}
+          pageNumber={pageNumber}
+          viewportWidth={viewport.width}
+          viewportHeight={viewport.height}
+          canvas={canvasRef.current}
+        />
+      )}
 
       {viewport && (
         <FreehandDrawLayer

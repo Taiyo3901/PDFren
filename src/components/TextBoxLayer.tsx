@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { PaneId, PdfTextBox } from "../types/pdf";
 import { usePdfTextBoxStore } from "../store/pdfTextBoxStore";
 
@@ -17,12 +17,22 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/**
+ * テキストボックス選択直後に Sidebar が開き、PDF表示領域が横へ移動すると、
+ * pointerup/click の座標がテキストボックス外として判定されることがあります。
+ * その直後の背景クリックで selectTextBox(null) されるのを防ぐため、
+ * テキストボックス操作開始後は短時間だけ背景クリック解除を抑止します。
+ */
+const TEXTBOX_CLICK_SUPPRESS_MS = 500;
+
 export function TextBoxLayer({
   pane,
   pageNumber,
   viewportWidth,
   viewportHeight,
 }: TextBoxLayerProps) {
+  const suppressBackgroundClickUntilRef = useRef(0);
+
   const textBoxAddArmed = usePdfTextBoxStore(
     (state) => state.textBoxAddArmed
   );
@@ -52,8 +62,23 @@ export function TextBoxLayer({
     (box) => box.pane === pane && box.page === pageNumber
   );
 
+  const suppressBackgroundClick = () => {
+    suppressBackgroundClickUntilRef.current =
+      Date.now() + TEXTBOX_CLICK_SUPPRESS_MS;
+  };
+
+  const isBackgroundClickSuppressed = () => {
+    return Date.now() < suppressBackgroundClickUntilRef.current;
+  };
+
   const handleLayerClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) {
+      return;
+    }
+
+    if (isBackgroundClickSuppressed()) {
+      event.preventDefault();
+      event.stopPropagation();
       return;
     }
 
@@ -94,6 +119,7 @@ export function TextBoxLayer({
     event.preventDefault();
     event.stopPropagation();
 
+    suppressBackgroundClick();
     selectTextBox(box.id);
 
     const startClientX = event.clientX;
@@ -102,6 +128,8 @@ export function TextBoxLayer({
     const startY = box.y;
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
+      suppressBackgroundClick();
+
       const deltaX = moveEvent.clientX - startClientX;
       const deltaY = moveEvent.clientY - startClientY;
 
@@ -115,6 +143,7 @@ export function TextBoxLayer({
     };
 
     const handlePointerUp = () => {
+      suppressBackgroundClick();
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
     };
@@ -130,6 +159,7 @@ export function TextBoxLayer({
     event.preventDefault();
     event.stopPropagation();
 
+    suppressBackgroundClick();
     selectTextBox(box.id);
 
     const startClientX = event.clientX;
@@ -138,6 +168,8 @@ export function TextBoxLayer({
     const startHeight = box.height;
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
+      suppressBackgroundClick();
+
       const deltaX = moveEvent.clientX - startClientX;
       const deltaY = moveEvent.clientY - startClientY;
 
@@ -160,6 +192,7 @@ export function TextBoxLayer({
     };
 
     const handlePointerUp = () => {
+      suppressBackgroundClick();
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
     };
@@ -209,7 +242,17 @@ export function TextBoxLayer({
             }}
             onMouseDown={(event) => {
               event.stopPropagation();
+              suppressBackgroundClick();
               selectTextBox(box.id);
+            }}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              suppressBackgroundClick();
+              selectTextBox(box.id);
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+              suppressBackgroundClick();
             }}
           >
             {selected && (
@@ -225,9 +268,14 @@ export function TextBoxLayer({
                 <button
                   type="button"
                   className="pdf-text-box-delete-button"
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    suppressBackgroundClick();
+                  }}
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
+                    suppressBackgroundClick();
                     removeTextBox(box.id);
                   }}
                   title="削除"
@@ -237,7 +285,6 @@ export function TextBoxLayer({
               </>
             )}
 
-            
             <textarea
               value={box.text}
               style={{
@@ -261,8 +308,22 @@ export function TextBoxLayer({
                 fontFamily:
                   "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
               }}
-
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                suppressBackgroundClick();
+                selectTextBox(box.id);
+              }}
+              onMouseDown={(event) => {
+                event.stopPropagation();
+                suppressBackgroundClick();
+                selectTextBox(box.id);
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                suppressBackgroundClick();
+              }}
               onFocus={() => {
+                suppressBackgroundClick();
                 selectTextBox(box.id);
               }}
               onChange={(event) => {

@@ -1,0 +1,831 @@
+/* =========================================================
+   PDF Viewer Unified Complete Additions - final cleaned
+   src/styles/pdf_viewer_unified_additions_final.css
+
+   統合対象:
+   - index_unified_complete_addition
+   - pdf_creation_fixes
+   - pdf_viewer_ui_overrides_final 相当
+
+   目的:
+   - PDF作成タブ中のコンパクトサイドバー
+   - テキストボックス操作中のコンパクトサイドバー・PDF被り防止
+   - 領域選択 / トリミング / 画像注釈レイヤーの操作調整
+   - PDFのみ全画面表示
+   - 上部操作パネル時のポップオーバー表示修正
+   - 重複・競合・無効セレクタを削除
+
+   推奨:
+   - index_unified_complete.css と pdf_creation_fixes.css 相当の追加分として使う場合は、
+     既存の分割CSSを外して、このファイルを最後に読み込む
+========================================================= */
+
+/* =========================================================
+   0. Shared variables
+========================================================= */
+
+:root {
+  --pdf-create-panel-width: 218px;
+  --pdf-create-rail-width: 30px;
+  --textbox-panel-width: 218px;
+  --textbox-rail-width: 30px;
+}
+
+:root[data-sidebar-pdf-create="true"] {
+  --sidebar-panel-width: var(--pdf-create-panel-width);
+  --sidebar-rail-width: var(--pdf-create-rail-width);
+}
+
+html[data-sidebar-textbox="true"],
+:root[data-sidebar-textbox="true"] {
+  --sidebar-panel-width: var(--textbox-panel-width) !important;
+  --sidebar-rail-width: var(--textbox-rail-width) !important;
+}
+
+/* =========================================================
+   1. PDF-only fullscreen slide mode
+========================================================= */
+
+.viewer-area.fullscreen-mode {
+  width: 100%;
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #0f1115;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-top: 0 !important;
+}
+
+.viewer-area.fullscreen-mode.single-mode {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.viewer-area.fullscreen-mode .pdf-pane {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.viewer-area.fullscreen-mode .pane-status {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 80;
+}
+
+.viewer-area.fullscreen-mode .pdf-page-wrapper {
+  width: max-content;
+  max-width: 100%;
+  max-height: 100%;
+  margin: auto;
+}
+
+.viewer-area:fullscreen ~ .floating-sidebar,
+.viewer-area:-webkit-full-screen ~ .floating-sidebar {
+  display: none !important;
+}
+
+/* =========================================================
+   2. Sidebar top panel popover override
+========================================================= */
+
+.floating-sidebar.panel-top,
+.floating-sidebar.panel-top:hover,
+.floating-sidebar.panel-top:focus,
+.floating-sidebar.panel-top:focus-visible,
+.floating-sidebar.panel-top:focus-within,
+.floating-sidebar.panel-top.keep-open,
+.floating-sidebar.panel-top.keep-open:hover,
+.floating-sidebar.panel-top.keep-open:focus,
+.floating-sidebar.panel-top.keep-open:focus-visible,
+.floating-sidebar.panel-top.keep-open:focus-within {
+  contain: none !important;
+  overflow: visible !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+  z-index: 5000 !important;
+}
+
+/* 操作タブのアイコン行は上部バー内に残す */
+.floating-sidebar.panel-top .sidebar-content:has(.icon-action-grid) {
+  position: static !important;
+  grid-column: 3 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* 検索 / 目次 / LaTeX / テキスト設定は上部バー下のポップオーバーへ */
+.floating-sidebar.panel-top .sidebar-content:has(.search-input),
+.floating-sidebar.panel-top .sidebar-content:has(.result-list),
+.floating-sidebar.panel-top .sidebar-content:has(.panel-section),
+.floating-sidebar.panel-top .sidebar-content:has(.formula-card),
+.floating-sidebar.panel-top .sidebar-content:has(.textbox-settings-card) {
+  position: fixed !important;
+  top: calc(var(--top-panel-height, 56px) + 8px) !important;
+  left: 8px !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: min(440px, calc(100vw - 16px)) !important;
+  max-width: calc(100vw - 16px) !important;
+  height: auto !important;
+  max-height: min(620px, calc(100vh - var(--top-panel-height, 56px) - 24px)) !important;
+  overflow: auto !important;
+  z-index: 6000 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  padding: 10px !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  border: 1px solid rgba(148, 163, 184, 0.26) !important;
+  border-radius: 14px !important;
+  background: rgba(15, 23, 42, 0.98) !important;
+  color: #e5e7eb !important;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.48) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+.floating-sidebar.panel-top .sidebar-content:has(.search-input) *,
+.floating-sidebar.panel-top .sidebar-content:has(.result-list) *,
+.floating-sidebar.panel-top .sidebar-content:has(.panel-section) *,
+.floating-sidebar.panel-top .sidebar-content:has(.formula-card) *,
+.floating-sidebar.panel-top .sidebar-content:has(.textbox-settings-card) * {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.floating-sidebar.panel-top .search-input {
+  width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.floating-sidebar.panel-top .result-list,
+.floating-sidebar.panel-top .panel-section {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+.floating-sidebar.panel-top .formula-latex,
+.floating-sidebar.panel-top .formula-raw {
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+}
+
+/* 上部バーでは操作タブの詳細カードを隠し、アイコン行だけ残す */
+.floating-sidebar.panel-top .sidebar-content:has(.icon-action-grid) .pane-control-card,
+.floating-sidebar.panel-top .sidebar-content:has(.icon-action-grid) .panel-section,
+.floating-sidebar.panel-top .sidebar-content:has(.icon-action-grid) .text-box-armed-message,
+.floating-sidebar.panel-top .sidebar-content:has(.icon-action-grid) .drawing-tool-panel {
+  display: none !important;
+}
+
+/* 描画設定だけは右側ポップオーバー */
+.floating-sidebar.panel-top .sidebar-content:has(.icon-action-grid):has(.drawing-tool-panel) .drawing-tool-panel {
+  display: flex !important;
+  position: fixed !important;
+  top: calc(var(--top-panel-height, 56px) + 8px) !important;
+  right: 10px !important;
+  width: 240px !important;
+  z-index: 6001 !important;
+  padding: 10px !important;
+  border: 1px solid rgba(148, 163, 184, 0.26) !important;
+  border-radius: 14px !important;
+  background: rgba(15, 23, 42, 0.98) !important;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.48) !important;
+}
+
+@media (max-width: 720px) {
+  .floating-sidebar.panel-top .sidebar-content:has(.search-input),
+  .floating-sidebar.panel-top .sidebar-content:has(.result-list),
+  .floating-sidebar.panel-top .sidebar-content:has(.panel-section),
+  .floating-sidebar.panel-top .sidebar-content:has(.formula-card),
+  .floating-sidebar.panel-top .sidebar-content:has(.textbox-settings-card) {
+    left: 6px !important;
+    right: 6px !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: min(560px, calc(100vh - var(--top-panel-height, 54px) - 18px)) !important;
+  }
+}
+
+/* =========================================================
+   3. PDF creation tab compact sidebar
+========================================================= */
+
+.sidebar-tabs button.pdf-create-tab::before,
+.floating-sidebar.panel-top .sidebar-tabs button.pdf-create-tab::before {
+  content: "＋";
+  font-weight: 900;
+}
+
+.pane-wide-button.active {
+  background: #1d4ed8;
+  border-color: #93c5fd;
+  color: #ffffff;
+}
+
+.floating-sidebar.pdf-create-active:not(.panel-top) {
+  width: var(--pdf-create-panel-width) !important;
+  max-width: var(--pdf-create-panel-width) !important;
+}
+
+.floating-sidebar.pdf-create-active.panel-left {
+  transform: translateX(calc(-100% + var(--pdf-create-rail-width))) !important;
+}
+
+.floating-sidebar.pdf-create-active.panel-right {
+  transform: translateX(calc(100% - var(--pdf-create-rail-width))) !important;
+}
+
+.floating-sidebar.pdf-create-active.keep-open.panel-left,
+.floating-sidebar.pdf-create-active.panel-left:hover,
+.floating-sidebar.pdf-create-active.keep-open.panel-right,
+.floating-sidebar.pdf-create-active.panel-right:hover {
+  transform: translateX(0) !important;
+}
+
+:root[data-sidebar-pdf-create="true"][data-sidebar-side="left"] .viewer-area {
+  padding-left: var(--pdf-create-panel-width) !important;
+  padding-right: 0 !important;
+}
+
+:root[data-sidebar-pdf-create="true"][data-sidebar-side="right"] .viewer-area {
+  padding-left: 0 !important;
+  padding-right: var(--pdf-create-panel-width) !important;
+}
+
+:root[data-sidebar-pdf-create="true"][data-sidebar-side="top"] .viewer-area {
+  padding-top: var(--top-panel-height, 56px) !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.floating-sidebar.pdf-create-active .sidebar-title-row,
+.floating-sidebar.textbox-active .sidebar-title-row {
+  min-height: 32px !important;
+  padding: 4px !important;
+  margin-bottom: 4px !important;
+  border-radius: 12px !important;
+}
+
+.floating-sidebar.pdf-create-active h1,
+.floating-sidebar.textbox-active h1 {
+  font-size: 0 !important;
+  width: 0 !important;
+  overflow: hidden !important;
+}
+
+.floating-sidebar.pdf-create-active h1::before,
+.floating-sidebar.textbox-active h1::before {
+  width: 22px !important;
+  height: 22px !important;
+  font-size: 12px !important;
+}
+
+.floating-sidebar.pdf-create-active .sidebar-title-actions,
+.floating-sidebar.textbox-active .sidebar-title-actions {
+  gap: 3px !important;
+}
+
+.floating-sidebar.pdf-create-active .sidebar-position-toggle,
+.floating-sidebar.pdf-create-active .sidebar-help-button,
+.floating-sidebar.pdf-create-active .sidebar-lock-toggle,
+.floating-sidebar.pdf-create-active .sidebar-top-toggle,
+.floating-sidebar.textbox-active .sidebar-position-toggle,
+.floating-sidebar.textbox-active .sidebar-help-button,
+.floating-sidebar.textbox-active .sidebar-lock-toggle,
+.floating-sidebar.textbox-active .sidebar-top-toggle,
+html[data-sidebar-textbox="true"] .floating-sidebar.textbox-active .settings-icon-button {
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  font-size: 11px !important;
+}
+
+.floating-sidebar.pdf-create-active .sidebar-tabs,
+.floating-sidebar.textbox-active .sidebar-tabs {
+  padding: 3px !important;
+  gap: 3px !important;
+  margin: 4px 0 !important;
+  border-radius: 12px !important;
+}
+
+.floating-sidebar.pdf-create-active .sidebar-tabs button,
+.floating-sidebar.textbox-active .sidebar-tabs button {
+  width: 26px !important;
+  min-width: 26px !important;
+  height: 26px !important;
+  min-height: 26px !important;
+  border-radius: 8px !important;
+}
+
+.floating-sidebar.pdf-create-active .sidebar-tabs button::before,
+.floating-sidebar.textbox-active .sidebar-tabs button::before {
+  font-size: 12px !important;
+}
+
+.floating-sidebar.pdf-create-active .sidebar-content,
+.floating-sidebar.textbox-active .sidebar-content {
+  gap: 5px !important;
+}
+
+.floating-sidebar.pdf-create-active .pane-control-card,
+.floating-sidebar.pdf-create-active .panel-section,
+.floating-sidebar.pdf-create-active .pdf-create-panel,
+.floating-sidebar.pdf-create-active .drawing-tool-panel,
+.floating-sidebar.pdf-create-active .text-box-armed-message,
+.floating-sidebar.pdf-create-active .settings-group,
+.floating-sidebar.textbox-active .pane-control-card,
+.floating-sidebar.textbox-active .panel-section,
+.floating-sidebar.textbox-active .textbox-settings-card,
+.floating-sidebar.textbox-active .settings-group,
+.floating-sidebar.textbox-active .text-box-armed-message {
+  padding: 5px !important;
+  gap: 5px !important;
+  border-radius: 9px !important;
+}
+
+.floating-sidebar.pdf-create-active .pane-control-card h2,
+.floating-sidebar.pdf-create-active .panel-section h2 {
+  font-size: 10px !important;
+  margin-bottom: 3px !important;
+}
+
+.floating-sidebar.pdf-create-active button,
+.floating-sidebar.pdf-create-active .pane-wide-button,
+.floating-sidebar.pdf-create-active .settings-wide-button,
+.floating-sidebar.pdf-create-active .settings-secondary-button,
+.floating-sidebar.pdf-create-active .settings-danger-button,
+.floating-sidebar.textbox-active button,
+.floating-sidebar.textbox-active .settings-wide-button,
+.floating-sidebar.textbox-active .settings-secondary-button,
+.floating-sidebar.textbox-active .settings-danger-button,
+.floating-sidebar.textbox-active .format-button,
+.floating-sidebar.textbox-active .setting-icon-button {
+  min-height: 24px !important;
+  font-size: 10px !important;
+  border-radius: 7px !important;
+}
+
+.floating-sidebar.pdf-create-active .pdf-create-action-button,
+.floating-sidebar.pdf-create-active .pdf-create-panel button {
+  min-height: 26px !important;
+  padding: 3px 5px !important;
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+}
+
+.floating-sidebar.pdf-create-active .icon-action-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 4px !important;
+  padding: 5px !important;
+  border-radius: 12px !important;
+}
+
+.floating-sidebar.pdf-create-active .icon-action-button {
+  min-height: 34px !important;
+  padding: 2px !important;
+  border-radius: 8px !important;
+}
+
+.floating-sidebar.pdf-create-active .icon-action-icon {
+  font-size: 13px !important;
+  margin: 0 !important;
+}
+
+.floating-sidebar.pdf-create-active input,
+.floating-sidebar.pdf-create-active .search-input,
+.floating-sidebar.pdf-create-active .page-jump-input,
+.floating-sidebar.pdf-create-active .zoom-input,
+.floating-sidebar.textbox-active input,
+.floating-sidebar.textbox-active .setting-stepper input {
+  min-height: 22px !important;
+  padding: 3px 4px !important;
+  font-size: 10px !important;
+  border-radius: 6px !important;
+}
+
+.floating-sidebar.pdf-create-active .sidebar-hover-rail {
+  width: var(--pdf-create-rail-width) !important;
+}
+
+.floating-sidebar.textbox-active .sidebar-hover-rail {
+  width: var(--textbox-rail-width) !important;
+}
+
+.floating-sidebar.pdf-create-active.panel-left:not(:hover):not(.keep-open) .sidebar-title-row,
+.floating-sidebar.pdf-create-active.panel-left:not(:hover):not(.keep-open) .sidebar-tabs,
+.floating-sidebar.pdf-create-active.panel-left:not(:hover):not(.keep-open) .sidebar-content {
+  padding-right: calc(var(--pdf-create-rail-width) + 4px) !important;
+}
+
+.floating-sidebar.pdf-create-active.panel-right:not(:hover):not(.keep-open) .sidebar-title-row,
+.floating-sidebar.pdf-create-active.panel-right:not(:hover):not(.keep-open) .sidebar-tabs,
+.floating-sidebar.pdf-create-active.panel-right:not(:hover):not(.keep-open) .sidebar-content {
+  padding-left: calc(var(--pdf-create-rail-width) + 4px) !important;
+}
+
+.floating-sidebar.panel-top.pdf-create-active,
+.floating-sidebar.panel-top.textbox-active {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.floating-sidebar.panel-top.pdf-create-active .sidebar-content:not(:has(.icon-action-grid)),
+.floating-sidebar.panel-top.textbox-active .sidebar-content:not(:has(.icon-action-grid)) {
+  position: fixed !important;
+  top: calc(var(--top-panel-height, 56px) + 8px) !important;
+  left: 8px !important;
+  width: min(360px, calc(100vw - 16px)) !important;
+  max-height: min(560px, calc(100vh - var(--top-panel-height, 56px) - 20px)) !important;
+  overflow: auto !important;
+  z-index: 6500 !important;
+}
+
+/* =========================================================
+   4. TextBox mode: sticky sidebar + no PDF overlap
+========================================================= */
+
+html[data-sidebar-textbox="true"] .floating-sidebar.textbox-active:not(.panel-top),
+.floating-sidebar.textbox-active:not(.panel-top) {
+  width: var(--textbox-panel-width) !important;
+  max-width: var(--textbox-panel-width) !important;
+}
+
+.floating-sidebar.textbox-active.panel-left {
+  transform: translateX(calc(-100% + var(--textbox-rail-width))) !important;
+}
+
+.floating-sidebar.textbox-active.panel-right {
+  transform: translateX(calc(100% - var(--textbox-rail-width))) !important;
+}
+
+html[data-sidebar-textbox="true"] .floating-sidebar.textbox-active.panel-left,
+html[data-sidebar-textbox="true"] .floating-sidebar.textbox-active.panel-left:hover,
+html[data-sidebar-textbox="true"] .floating-sidebar.textbox-active.panel-left:focus-within,
+html[data-sidebar-textbox="true"] .floating-sidebar.textbox-active.panel-left.keep-open,
+html[data-sidebar-textbox="true"] .floating-sidebar.textbox-active.panel-right,
+html[data-sidebar-textbox="true"] .floating-sidebar.textbox-active.panel-right:hover,
+html[data-sidebar-textbox="true"] .floating-sidebar.textbox-active.panel-right:focus-within,
+html[data-sidebar-textbox="true"] .floating-sidebar.textbox-active.panel-right.keep-open,
+.floating-sidebar.textbox-active.keep-open.panel-left,
+.floating-sidebar.textbox-active.panel-left:hover,
+.floating-sidebar.textbox-active.keep-open.panel-right,
+.floating-sidebar.textbox-active.panel-right:hover {
+  transform: translateX(0) !important;
+  pointer-events: auto !important;
+  z-index: 5000 !important;
+}
+
+html[data-sidebar-textbox="true"][data-sidebar-side="left"] main.viewer-area,
+html[data-sidebar-textbox="true"][data-sidebar-side="left"] .viewer-area,
+:root[data-sidebar-textbox="true"][data-sidebar-side="left"] .viewer-area {
+  padding-left: var(--textbox-panel-width) !important;
+  padding-right: 0 !important;
+}
+
+html[data-sidebar-textbox="true"][data-sidebar-side="right"] main.viewer-area,
+html[data-sidebar-textbox="true"][data-sidebar-side="right"] .viewer-area,
+:root[data-sidebar-textbox="true"][data-sidebar-side="right"] .viewer-area {
+  padding-left: 0 !important;
+  padding-right: var(--textbox-panel-width) !important;
+}
+
+html[data-sidebar-textbox="true"][data-sidebar-side="top"] main.viewer-area,
+html[data-sidebar-textbox="true"][data-sidebar-side="top"] .viewer-area,
+:root[data-sidebar-textbox="true"][data-sidebar-side="top"] .viewer-area {
+  padding-top: var(--top-panel-height, 56px) !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+html[data-sidebar-textbox="true"] .floating-sidebar.textbox-active .sidebar-hover-rail {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: var(--textbox-rail-width) !important;
+}
+
+.floating-sidebar.textbox-active .settings-header {
+  gap: 4px !important;
+}
+
+.floating-sidebar.textbox-active .settings-subtitle {
+  display: none !important;
+}
+
+.floating-sidebar.textbox-active .settings-group-title,
+.floating-sidebar.textbox-active .setting-label,
+html[data-sidebar-textbox="true"] .floating-sidebar.textbox-active .setting-label,
+html[data-sidebar-textbox="true"] .floating-sidebar.textbox-active .settings-group-title {
+  font-size: 10px !important;
+}
+
+.floating-sidebar.textbox-active .setting-row,
+html[data-sidebar-textbox="true"] .floating-sidebar.textbox-active .setting-row {
+  grid-template-columns: 48px 1fr !important;
+  gap: 5px !important;
+}
+
+.floating-sidebar.textbox-active .format-button {
+  min-height: 32px !important;
+  padding: 3px !important;
+}
+
+.floating-sidebar.textbox-active .format-button strong,
+.floating-sidebar.textbox-active .format-button em,
+.floating-sidebar.textbox-active .underline-icon {
+  font-size: 12px !important;
+  margin-bottom: 1px !important;
+}
+
+.floating-sidebar.textbox-active.panel-left:not(:hover):not(.keep-open) .sidebar-title-row,
+.floating-sidebar.textbox-active.panel-left:not(:hover):not(.keep-open) .sidebar-tabs,
+.floating-sidebar.textbox-active.panel-left:not(:hover):not(.keep-open) .sidebar-content {
+  padding-right: calc(var(--textbox-rail-width) + 4px) !important;
+}
+
+.floating-sidebar.textbox-active.panel-right:not(:hover):not(.keep-open) .sidebar-title-row,
+.floating-sidebar.textbox-active.panel-right:not(:hover):not(.keep-open) .sidebar-tabs,
+.floating-sidebar.textbox-active.panel-right:not(:hover):not(.keep-open) .sidebar-content {
+  padding-left: calc(var(--textbox-rail-width) + 4px) !important;
+}
+
+/* =========================================================
+   5. Area selection layer and trim handles
+========================================================= */
+
+.pdf-area-selection-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 28;
+}
+
+.pdf-area-selection-layer.active {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+.pdf-area-selection-rect {
+  position: absolute;
+  z-index: 29;
+  border: 2px dashed rgba(96, 165, 250, 0.95);
+  background: rgba(96, 165, 250, 0.14);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.pdf-area-selection-rect.confirmed,
+.pdf-area-selection-preview {
+  z-index: 38;
+  border: 2px solid rgba(245, 158, 11, 0.95);
+  background: rgba(245, 158, 11, 0.18);
+  cursor: grab;
+  pointer-events: auto;
+  overflow: visible !important;
+}
+
+.pdf-area-selection-preview:active {
+  cursor: grabbing;
+}
+
+/* ガイド文言は非表示 */
+.pdf-area-selection-preview::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* 元PDF側のトリミングハンドル: 見た目非表示、当たり判定だけ残す */
+.pdf-area-trim-handle {
+  position: absolute;
+  z-index: 70;
+  pointer-events: auto;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+  box-sizing: border-box;
+}
+
+.pdf-area-trim-handle:hover {
+  opacity: 0 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+.pdf-area-trim-handle.trim-n,
+.pdf-area-trim-handle.trim-s {
+  left: 50%;
+  width: 34px;
+  height: 8px;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+  border-radius: 999px;
+}
+
+.pdf-area-trim-handle.trim-n { top: -5px; }
+.pdf-area-trim-handle.trim-s { bottom: -5px; }
+
+.pdf-area-trim-handle.trim-e,
+.pdf-area-trim-handle.trim-w {
+  top: 50%;
+  width: 8px;
+  height: 34px;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+  border-radius: 999px;
+}
+
+.pdf-area-trim-handle.trim-e { right: -5px; }
+.pdf-area-trim-handle.trim-w { left: -5px; }
+
+.pdf-area-trim-handle.trim-ne,
+.pdf-area-trim-handle.trim-nw,
+.pdf-area-trim-handle.trim-se,
+.pdf-area-trim-handle.trim-sw {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.pdf-area-trim-handle.trim-ne {
+  top: -7px;
+  right: -7px;
+  cursor: nesw-resize;
+}
+
+.pdf-area-trim-handle.trim-nw {
+  top: -7px;
+  left: -7px;
+  cursor: nwse-resize;
+}
+
+.pdf-area-trim-handle.trim-se {
+  right: -7px;
+  bottom: -7px;
+  cursor: nwse-resize;
+}
+
+.pdf-area-trim-handle.trim-sw {
+  left: -7px;
+  bottom: -7px;
+  cursor: nesw-resize;
+}
+
+/* =========================================================
+   6. Image annotation layer
+   操作:
+   - 中央ドラッグ: 移動
+   - 四辺/四隅: トリミング
+   - 右下青丸: 拡大縮小
+========================================================= */
+
+.pdf-image-annotation-layer,
+.pdf-image-annotation {
+  user-select: none;
+}
+
+.pdf-image-annotation {
+  cursor: move;
+  touch-action: none;
+  overflow: visible !important;
+}
+
+.pdf-image-annotation.selected {
+  outline: 1px solid rgba(37, 99, 235, 0.75);
+  outline-offset: 0;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.28);
+}
+
+.pdf-image-annotation-delete-button {
+  position: absolute;
+  top: -24px;
+  right: -24px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0;
+  border: 1px solid #7f1d1d;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #111111;
+  font-size: 15px;
+  line-height: 18px;
+  z-index: 95;
+  cursor: pointer;
+}
+
+.pdf-image-annotation-delete-button:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+/* 貼り付け画像のトリミング用。当たり判定のみで見た目は非表示 */
+.pdf-image-trim-handle {
+  position: absolute;
+  z-index: 80;
+  pointer-events: auto;
+  background: transparent;
+  border: none;
+  opacity: 0;
+}
+
+.pdf-image-trim-handle.trim-n,
+.pdf-image-trim-handle.trim-s {
+  left: 10px;
+  right: 10px;
+  height: 10px;
+  cursor: ns-resize;
+}
+
+.pdf-image-trim-handle.trim-n { top: -5px; }
+.pdf-image-trim-handle.trim-s { bottom: -5px; }
+
+.pdf-image-trim-handle.trim-e,
+.pdf-image-trim-handle.trim-w {
+  top: 10px;
+  bottom: 10px;
+  width: 10px;
+  cursor: ew-resize;
+}
+
+.pdf-image-trim-handle.trim-e { right: -5px; }
+.pdf-image-trim-handle.trim-w { left: -5px; }
+
+.pdf-image-trim-handle.trim-ne,
+.pdf-image-trim-handle.trim-nw,
+.pdf-image-trim-handle.trim-se,
+.pdf-image-trim-handle.trim-sw {
+  width: 16px;
+  height: 16px;
+}
+
+.pdf-image-trim-handle.trim-ne {
+  top: -8px;
+  right: -8px;
+  cursor: nesw-resize;
+}
+
+.pdf-image-trim-handle.trim-nw {
+  top: -8px;
+  left: -8px;
+  cursor: nwse-resize;
+}
+
+.pdf-image-trim-handle.trim-se {
+  right: -8px;
+  bottom: -8px;
+  cursor: nwse-resize;
+}
+
+.pdf-image-trim-handle.trim-sw {
+  left: -8px;
+  bottom: -8px;
+  cursor: nesw-resize;
+}
+
+/* 貼り付け画像の拡大縮小用。右下外側の青丸 */
+.pdf-image-annotation-resize-handle,
+.pdf-image-resize-handle {
+  position: absolute;
+  right: -18px;
+  bottom: -18px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: #2563eb;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  cursor: nwse-resize;
+  z-index: 100;
+  pointer-events: auto;
+}
+
+.pdf-image-annotation-resize-handle:hover,
+.pdf-image-resize-handle:hover {
+  background: #60a5fa;
+}

@@ -829,3 +829,11 @@ html[data-sidebar-textbox="true"] .floating-sidebar.textbox-active .setting-row 
 .pdf-image-resize-handle:hover {
   background: #60a5fa;
 }
+
+.pdf-image-annotation {
+  z-index: 40;
+}
+
+.pdf-image-annotation.selected {
+  z-index: 200;
+}

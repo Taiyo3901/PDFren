@@ -176,7 +176,16 @@ function PdfPageComponent({
       <HighlightOverlay pane={pane} pageNumber={pageNumber} />
 
       {viewport && (
-        <PdfImageAnnotationLayer
+        <FreehandDrawLayer
+          pane={pane}
+          pageNumber={pageNumber}
+          width={viewport.width}
+          height={viewport.height}
+        />
+      )}
+
+      {viewport && (
+        <TextBoxLayer
           pane={pane}
           pageNumber={pageNumber}
           viewportWidth={viewport.width}
@@ -195,16 +204,7 @@ function PdfPageComponent({
       )}
 
       {viewport && (
-        <FreehandDrawLayer
-          pane={pane}
-          pageNumber={pageNumber}
-          width={viewport.width}
-          height={viewport.height}
-        />
-      )}
-
-      {viewport && (
-        <TextBoxLayer
+        <PdfImageAnnotationLayer
           pane={pane}
           pageNumber={pageNumber}
           viewportWidth={viewport.width}

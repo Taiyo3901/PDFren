@@ -33,20 +33,14 @@ export function TextBoxLayer({
 }: TextBoxLayerProps) {
   const suppressBackgroundClickUntilRef = useRef(0);
 
-  const textBoxAddArmed = usePdfTextBoxStore(
-    (state) => state.textBoxAddArmed
-  );
-  const selectedTextBoxId = usePdfTextBoxStore(
-    (state) => state.selectedTextBoxId
-  );
+  const textBoxAddArmed = usePdfTextBoxStore((state) => state.textBoxAddArmed);
+  const selectedTextBoxId = usePdfTextBoxStore((state) => state.selectedTextBoxId);
   const textBoxes = usePdfTextBoxStore((state) => state.textBoxes);
   const addTextBox = usePdfTextBoxStore((state) => state.addTextBox);
   const updateTextBox = usePdfTextBoxStore((state) => state.updateTextBox);
   const removeTextBox = usePdfTextBoxStore((state) => state.removeTextBox);
   const selectTextBox = usePdfTextBoxStore((state) => state.selectTextBox);
-  const cancelTextBoxAdd = usePdfTextBoxStore(
-    (state) => state.cancelTextBoxAdd
-  );
+  const cancelTextBoxAdd = usePdfTextBoxStore((state) => state.cancelTextBoxAdd);
   const setViewportInfo = usePdfTextBoxStore((state) => state.setViewportInfo);
 
   useEffect(() => {
@@ -88,7 +82,6 @@ export function TextBoxLayer({
     }
 
     const rect = event.currentTarget.getBoundingClientRect();
-
     const x = clamp(event.clientX - rect.left, 0, viewportWidth - 220);
     const y = clamp(event.clientY - rect.top, 0, viewportHeight - 82);
 
@@ -210,8 +203,10 @@ export function TextBoxLayer({
         width: `${viewportWidth}px`,
         height: `${viewportHeight}px`,
         zIndex: 30,
-        pointerEvents:
-          textBoxAddArmed || pageTextBoxes.length > 0 ? "auto" : "none",
+        // 重要:
+        // ページ全体でイベントを拾うのは「テキストボックス追加モード」の時だけ。
+        // 通常時は親レイヤーを透過し、画像貼り付け/画像移動/画像トリミングのイベントを邪魔しない。
+        pointerEvents: textBoxAddArmed ? "auto" : "none",
       }}
       onClick={handleLayerClick}
     >
@@ -229,6 +224,9 @@ export function TextBoxLayer({
             className={selected ? "pdf-text-box selected" : "pdf-text-box"}
             style={{
               position: "absolute",
+              // 親レイヤーが pointerEvents: none の時でも、
+              // テキストボックス本体だけは選択・編集できるようにする。
+              pointerEvents: "auto",
               left: `${box.x}px`,
               top: `${box.y}px`,
               width: `${box.width}px`,

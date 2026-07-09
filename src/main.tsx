@@ -1,9 +1,10 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import "./styles/index.css";
-import "./styles/pdf_analyzer_unified_ui.css";
-import "./styles/pdf_viewer_unified_additions_final.css";
+//import "./styles/index.css";
+//import "./styles/pdf_analyzer_unified_ui.css";
+//import "./styles/pdf_viewer_unified_additions_final.css";
+import "./styles/pdfren_unified_complete2.css";
 
 const rootElement = document.getElementById("root");
 

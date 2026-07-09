@@ -577,6 +577,7 @@ export function PdfImageAnnotationLayer({
             }
             style={{
               position: "absolute",
+              zIndex: selected ? 200 : 40,
               left: `${rect.x}px`,
               top: `${rect.y}px`,
               width: `${rect.width}px`,

@@ -15,9 +15,12 @@ type PdfPaneProps = {
 type ScrollAnchor = { page: number; ratioX: number; ratioY: number };
 
 const MIN_SCALE = 0.25;
-const PANE_HORIZONTAL_PADDING = 40;
-const PANE_VERTICAL_PADDING = 32;
-const AUTO_FIT_MARGIN = 16;
+
+// ↔ ボタンは「横幅いっぱい」を優先するため、横方向の余白を計算から外す。
+// 縦方向は自動縮小の判定に使わないが、将来の余白調整用として軽く残す。
+const PANE_HORIZONTAL_PADDING = 0;
+const PANE_VERTICAL_PADDING = 16;
+const AUTO_FIT_MARGIN = 0;
 const SCALE_EPSILON = 0.0001;
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -27,17 +30,31 @@ function clampNumber(value: number, min: number, max: number): number {
 function getReadableErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
-  try { return JSON.stringify(error, null, 2); } catch { return String(error); }
+  try {
+    return JSON.stringify(error, null, 2);
+  } catch {
+    return String(error);
+  }
 }
 
 function normalizePdfUrl(url: string): string {
   if (url.startsWith("file:")) {
-    try { return decodeURI(url); } catch { return url; }
+    try {
+      return decodeURI(url);
+    } catch {
+      return url;
+    }
   }
   return url;
 }
 
-export function PdfPane({ pane, debugTextLayer, isActive = false, fullscreenMode = false, onTextItems }: PdfPaneProps) {
+export function PdfPane({
+  pane,
+  debugTextLayer,
+  isActive = false,
+  fullscreenMode = false,
+  onTextItems,
+}: PdfPaneProps) {
   const paneState = useViewerStore((state) => state.panes[pane]);
   const setTotalPages = useViewerStore((state) => state.setTotalPages);
   const setPageNumber = useViewerStore((state) => state.setPageNumber);
@@ -69,7 +86,9 @@ export function PdfPane({ pane, debugTextLayer, isActive = false, fullscreenMode
     ? paneState.fitScale ?? paneState.userScale ?? 1
     : paneState.userScale ?? 1;
 
-  useEffect(() => { latestUserScaleRef.current = paneState.userScale; }, [paneState.userScale]);
+  useEffect(() => {
+    latestUserScaleRef.current = paneState.userScale;
+  }, [paneState.userScale]);
 
   useEffect(() => {
     initialScrollDoneRef.current = false;
@@ -107,23 +126,37 @@ export function PdfPane({ pane, debugTextLayer, isActive = false, fullscreenMode
           useSystemFonts: true,
         } as any);
 
-        loadingTask.onPassword = (updatePassword: (password: string) => void, reason: number) => {
-          const password = window.prompt(reason === 2 ? "パスワードが正しくありません。もう一度入力してください。" : "このPDFはパスワードで保護されています。パスワードを入力してください。");
+        loadingTask.onPassword = (
+          updatePassword: (password: string) => void,
+          reason: number
+        ) => {
+          const password = window.prompt(
+            reason === 2
+              ? "パスワードが正しくありません。もう一度入力してください。"
+              : "このPDFはパスワードで保護されています。パスワードを入力してください。"
+          );
+
           if (password === null) {
             passwordCancelled = true;
-            if (!cancelled) setLoadError("パスワード入力がキャンセルされたため、PDFを開けませんでした。");
+            if (!cancelled) {
+              setLoadError("パスワード入力がキャンセルされたため、PDFを開けませんでした。");
+            }
             void loadingTask.destroy();
             return;
           }
+
           updatePassword(password);
         };
 
         const loadedPdf = await loadingTask.promise;
         if (cancelled || passwordCancelled) return;
+
         setPdf(loadedPdf);
         setTotalPages(pane, loadedPdf.numPages);
+
         const firstPage = await loadedPdf.getPage(1);
         const baseViewport = firstPage.getViewport({ scale: 1 });
+
         if (!cancelled) {
           setBasePageWidth(baseViewport.width);
           setBasePageHeight(baseViewport.height);
@@ -131,25 +164,46 @@ export function PdfPane({ pane, debugTextLayer, isActive = false, fullscreenMode
       } catch (error) {
         console.error(`[${pane}] PDF load failed`, error);
         if (!cancelled && !passwordCancelled) {
-          setLoadError(["PDFの読み込みに失敗しました。", "", getReadableErrorMessage(error), "", "パスワード付きPDFの場合は、正しいパスワードを入力してください。", "", "file:/// のPDFを開いている場合は、Chrome拡張の詳細画面で", "「ファイルのURLへのアクセスを許可する」をONにしてください。", "", "日本語ファイル名や特殊フォントを含むPDFの場合、", "cMap / standardFontData の設定が必要なことがあります。"].join("\n"));
+          setLoadError(
+            [
+              "PDFの読み込みに失敗しました。",
+              "",
+              getReadableErrorMessage(error),
+              "",
+              "パスワード付きPDFの場合は、正しいパスワードを入力してください。",
+              "",
+              "file:/// のPDFを開いている場合は、Chrome拡張の詳細画面で",
+              "「ファイルのURLへのアクセスを許可する」をONにしてください。",
+              "",
+              "日本語ファイル名や特殊フォントを含むPDFの場合、",
+              "cMap / standardFontData の設定が必要なことがあります。",
+            ].join("\n")
+          );
         }
       }
     }
 
     void loadPdfDocument(paneState.pdfUrl);
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   }, [pane, paneState.pdfUrl, setTotalPages]);
 
   const getDominantVisiblePage = (): number => {
     if (fullscreenMode) return paneState.pageNumber;
+
     const container = containerRef.current;
     if (!container || !pdf) return paneState.pageNumber;
+
     const containerRect = container.getBoundingClientRect();
     let bestPage = paneState.pageNumber;
     let bestVisibleArea = 0;
+
     for (let page = 1; page <= pdf.numPages; page += 1) {
       const element = pageRefs.current[page];
       if (!element) continue;
+
       const rect = element.getBoundingClientRect();
       const visibleTop = Math.max(rect.top, containerRect.top);
       const visibleBottom = Math.min(rect.bottom, containerRect.bottom);
@@ -158,76 +212,133 @@ export function PdfPane({ pane, debugTextLayer, isActive = false, fullscreenMode
       const visibleRight = Math.min(rect.right, containerRect.right);
       const visibleWidth = Math.max(0, visibleRight - visibleLeft);
       const visibleArea = visibleWidth * visibleHeight;
+
       if (visibleArea > bestVisibleArea) {
         bestVisibleArea = visibleArea;
         bestPage = page;
       }
     }
+
     return bestPage;
   };
 
   function getScrollAnchor(): ScrollAnchor | null {
     if (fullscreenMode) return latestStableAnchorRef.current;
+
     const container = containerRef.current;
     if (!container || !pdf) return latestStableAnchorRef.current;
+
     const page = getDominantVisiblePage();
     const pageElement = pageRefs.current[page];
     if (!pageElement) return latestStableAnchorRef.current;
-    const centerXInPage = container.scrollLeft + container.clientWidth / 2 - pageElement.offsetLeft;
-    const centerYInPage = container.scrollTop + container.clientHeight / 2 - pageElement.offsetTop;
+
+    const centerXInPage =
+      container.scrollLeft + container.clientWidth / 2 - pageElement.offsetLeft;
+    const centerYInPage =
+      container.scrollTop + container.clientHeight / 2 - pageElement.offsetTop;
+
     return {
       page,
-      ratioX: pageElement.offsetWidth > 0 ? clampNumber(centerXInPage / pageElement.offsetWidth, 0, 1) : 0.5,
-      ratioY: pageElement.offsetHeight > 0 ? clampNumber(centerYInPage / pageElement.offsetHeight, 0, 1) : 0,
+      ratioX:
+        pageElement.offsetWidth > 0
+          ? clampNumber(centerXInPage / pageElement.offsetWidth, 0, 1)
+          : 0.5,
+      ratioY:
+        pageElement.offsetHeight > 0
+          ? clampNumber(centerYInPage / pageElement.offsetHeight, 0, 1)
+          : 0,
     };
   }
 
   const scrollToPage = (pageNumber: number, behavior: ScrollBehavior = "smooth") => {
     if (fullscreenMode) return true;
+
     const container = containerRef.current;
     const pageElement = pageRefs.current[pageNumber];
     if (!container || !pageElement) return false;
+
     const maxLeft = Math.max(0, container.scrollWidth - container.clientWidth);
-    const targetLeft = pageElement.offsetLeft + pageElement.offsetWidth / 2 - container.clientWidth / 2;
-    container.scrollTo({ top: pageElement.offsetTop, left: clampNumber(targetLeft, 0, maxLeft), behavior });
-    suppressPageDetectUntilRef.current = behavior === "smooth" ? Date.now() + 650 : Date.now() + 500;
-    window.requestAnimationFrame(() => { latestStableAnchorRef.current = getScrollAnchor(); });
+    const targetLeft =
+      pageElement.offsetLeft + pageElement.offsetWidth / 2 - container.clientWidth / 2;
+
+    container.scrollTo({
+      top: pageElement.offsetTop,
+      left: clampNumber(targetLeft, 0, maxLeft),
+      behavior,
+    });
+
+    suppressPageDetectUntilRef.current =
+      behavior === "smooth" ? Date.now() + 650 : Date.now() + 500;
+
+    window.requestAnimationFrame(() => {
+      latestStableAnchorRef.current = getScrollAnchor();
+    });
+
     return true;
   };
 
   const restoreScrollAnchor = (anchor: ScrollAnchor | null) => {
     if (fullscreenMode || !anchor) return;
+
     const container = containerRef.current;
     const pageElement = pageRefs.current[anchor.page];
     if (!container || !pageElement) return;
-    const targetLeft = pageElement.offsetLeft + pageElement.offsetWidth * anchor.ratioX - container.clientWidth / 2;
-    const targetTop = pageElement.offsetTop + pageElement.offsetHeight * anchor.ratioY - container.clientHeight / 2;
-    container.scrollLeft = clampNumber(targetLeft, 0, Math.max(0, container.scrollWidth - container.clientWidth));
-    container.scrollTop = clampNumber(targetTop, 0, Math.max(0, container.scrollHeight - container.clientHeight));
+
+    const targetLeft =
+      pageElement.offsetLeft + pageElement.offsetWidth * anchor.ratioX - container.clientWidth / 2;
+    const targetTop =
+      pageElement.offsetTop + pageElement.offsetHeight * anchor.ratioY - container.clientHeight / 2;
+
+    container.scrollLeft = clampNumber(
+      targetLeft,
+      0,
+      Math.max(0, container.scrollWidth - container.clientWidth)
+    );
+    container.scrollTop = clampNumber(
+      targetTop,
+      0,
+      Math.max(0, container.scrollHeight - container.clientHeight)
+    );
+
     latestStableAnchorRef.current = getScrollAnchor();
   };
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !basePageWidth || !basePageHeight) return;
+
     const updateFitAndShrinkIfNeeded = () => {
-      const availableWidth = container.clientWidth - PANE_HORIZONTAL_PADDING - AUTO_FIT_MARGIN;
-      const availableHeight = container.clientHeight - PANE_VERTICAL_PADDING - AUTO_FIT_MARGIN;
+      const availableWidth =
+        container.clientWidth - PANE_HORIZONTAL_PADDING - AUTO_FIT_MARGIN;
+      const availableHeight =
+        container.clientHeight - PANE_VERTICAL_PADDING - AUTO_FIT_MARGIN;
+
       if (availableWidth <= 0 || availableHeight <= 0) return;
-      const fitScale = Math.max(MIN_SCALE, Math.min(availableWidth / basePageWidth, availableHeight / basePageHeight));
+
+      // ↔ は横幅合わせなので、高さではなく横幅のみで fitScale を決める。
+      const fitScale = Math.max(MIN_SCALE, availableWidth / basePageWidth);
       setFitScale(pane, fitScale);
+
       if (fullscreenMode) {
         lastAvailableWidthRef.current = availableWidth;
         lastMeasuredUserScaleRef.current = latestUserScaleRef.current;
         return;
       }
+
       const previousAvailableWidth = lastAvailableWidthRef.current;
       const currentUserScale = latestUserScaleRef.current;
       const previousMeasuredScale = lastMeasuredUserScaleRef.current;
       const isInitialMeasure = previousAvailableWidth === null;
-      const paneBecameNarrower = previousAvailableWidth !== null && availableWidth < previousAvailableWidth - 2;
-      const scaleChangedSinceLastMeasure = Math.abs(currentUserScale - previousMeasuredScale) > SCALE_EPSILON;
-      const shouldAutoShrink = !scaleChangedSinceLastMeasure && (isInitialMeasure || paneBecameNarrower) && (basePageWidth * currentUserScale > availableWidth || basePageHeight * currentUserScale > availableHeight);
+      const paneBecameNarrower =
+        previousAvailableWidth !== null && availableWidth < previousAvailableWidth - 2;
+      const scaleChangedSinceLastMeasure =
+        Math.abs(currentUserScale - previousMeasuredScale) > SCALE_EPSILON;
+
+      const shouldAutoShrink =
+        !scaleChangedSinceLastMeasure &&
+        (isInitialMeasure || paneBecameNarrower) &&
+        basePageWidth * currentUserScale > availableWidth;
+
       if (shouldAutoShrink) {
         const nextScale = Math.max(MIN_SCALE, fitScale);
         if (nextScale < currentUserScale) {
@@ -235,60 +346,84 @@ export function PdfPane({ pane, debugTextLayer, isActive = false, fullscreenMode
           setUserScale(pane, nextScale);
         }
       }
+
       lastAvailableWidthRef.current = availableWidth;
       lastMeasuredUserScaleRef.current = currentUserScale;
     };
-    const observer = new ResizeObserver(() => window.requestAnimationFrame(updateFitAndShrinkIfNeeded));
+
+    const observer = new ResizeObserver(() =>
+      window.requestAnimationFrame(updateFitAndShrinkIfNeeded)
+    );
     observer.observe(container);
     window.requestAnimationFrame(updateFitAndShrinkIfNeeded);
+
     return () => observer.disconnect();
   }, [pane, basePageWidth, basePageHeight, fullscreenMode, setFitScale, setUserScale]);
 
   useEffect(() => {
     if (!pdf || initialScrollDoneRef.current) return;
+
     const targetPage = paneState.pageNumber;
     let cancelled = false;
     let attempts = 0;
     suppressPageDetectUntilRef.current = Date.now() + 1500;
+
     const tryScroll = () => {
       if (cancelled || initialScrollDoneRef.current) return;
+
       attempts += 1;
       const didScroll = scrollToPage(targetPage, "auto");
+
       if (didScroll || attempts >= 30) {
         initialScrollDoneRef.current = true;
         suppressPageDetectUntilRef.current = Date.now() + 500;
         latestStableAnchorRef.current = getScrollAnchor();
         return;
       }
+
       window.setTimeout(tryScroll, 50);
     };
+
     window.requestAnimationFrame(() => window.requestAnimationFrame(tryScroll));
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   }, [pdf, paneState.pageNumber]);
 
   useEffect(() => {
     if (!pdf || paneState.jumpRequestId === lastJumpRequestIdRef.current) return;
+
     lastJumpRequestIdRef.current = paneState.jumpRequestId;
+
     window.requestAnimationFrame(() => {
       const didScroll = scrollToPage(paneState.pageNumber, "smooth");
-      if (!didScroll) window.setTimeout(() => scrollToPage(paneState.pageNumber, "smooth"), 80);
+      if (!didScroll) {
+        window.setTimeout(() => scrollToPage(paneState.pageNumber, "smooth"), 80);
+      }
     });
   }, [pdf, paneState.jumpRequestId, paneState.pageNumber, fullscreenMode]);
 
   useLayoutEffect(() => {
     if (!pdf) return;
+
     const previousScale = previousScaleRef.current;
+
     if (previousScale === paneState.userScale) {
       latestStableAnchorRef.current = getScrollAnchor();
       return;
     }
+
     const anchor = pendingScaleAnchorRef.current ?? latestStableAnchorRef.current;
     previousScaleRef.current = paneState.userScale;
-    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      restoreScrollAnchor(anchor);
-      pendingScaleAnchorRef.current = null;
-      suppressPageDetectUntilRef.current = Date.now() + 300;
-    }));
+
+    window.requestAnimationFrame(() =>
+      window.requestAnimationFrame(() => {
+        restoreScrollAnchor(anchor);
+        pendingScaleAnchorRef.current = null;
+        suppressPageDetectUntilRef.current = Date.now() + 300;
+      })
+    );
   }, [pdf, paneState.userScale]);
 
   useEffect(() => {
@@ -296,8 +431,10 @@ export function PdfPane({ pane, debugTextLayer, isActive = false, fullscreenMode
       lastFullscreenModeRef.current = fullscreenMode;
       return;
     }
+
     const wasFullscreen = lastFullscreenModeRef.current;
     lastFullscreenModeRef.current = fullscreenMode;
+
     if (fullscreenMode && !wasFullscreen) {
       const startPage = getDominantVisiblePage();
       setPageNumber(pane, startPage);
@@ -306,24 +443,38 @@ export function PdfPane({ pane, debugTextLayer, isActive = false, fullscreenMode
       suppressPageDetectUntilRef.current = Date.now() + 500;
       return;
     }
+
     if (!fullscreenMode && wasFullscreen) {
       const anchor = fullscreenAnchorRef.current ?? latestStableAnchorRef.current;
-      window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-        restoreScrollAnchor(anchor);
-        suppressPageDetectUntilRef.current = Date.now() + 500;
-      }));
+      window.requestAnimationFrame(() =>
+        window.requestAnimationFrame(() => {
+          restoreScrollAnchor(anchor);
+          suppressPageDetectUntilRef.current = Date.now() + 500;
+        })
+      );
     }
   }, [fullscreenMode, pdf, pane, setPageNumber]);
 
   const updateDominantVisiblePage = () => {
-    if (!pdf || !initialScrollDoneRef.current || Date.now() < suppressPageDetectUntilRef.current) return;
+    if (
+      !pdf ||
+      !initialScrollDoneRef.current ||
+      Date.now() < suppressPageDetectUntilRef.current
+    ) {
+      return;
+    }
+
     const bestPage = getDominantVisiblePage();
-    if (bestPage !== paneState.pageNumber) setPageNumber(pane, bestPage);
+    if (bestPage !== paneState.pageNumber) {
+      setPageNumber(pane, bestPage);
+    }
   };
 
   const handleScroll = () => {
     latestStableAnchorRef.current = getScrollAnchor();
+
     if (tickingRef.current) return;
+
     tickingRef.current = true;
     window.requestAnimationFrame(() => {
       latestStableAnchorRef.current = getScrollAnchor();
@@ -332,18 +483,65 @@ export function PdfPane({ pane, debugTextLayer, isActive = false, fullscreenMode
     });
   };
 
-  if (!paneState.pdfUrl) return <section className="pdf-pane empty-pane" data-pane-id={pane}><div>PDFが読み込まれていません</div></section>;
-  if (loadError) return <section className="pdf-pane empty-pane" data-pane-id={pane}><div><h3>PDF読み込みエラー</h3><pre>{loadError}</pre></div></section>;
-  if (!pdf) return <section className="pdf-pane empty-pane" data-pane-id={pane}><div>PDFを読み込み中...</div></section>;
+  if (!paneState.pdfUrl) {
+    return (
+      <section className="pdf-pane empty-pane" data-pane-id={pane}>
+        <div>PDFが読み込まれていません</div>
+      </section>
+    );
+  }
 
-  const visiblePageNumbers = fullscreenMode ? [paneState.pageNumber] : Array.from({ length: pdf.numPages }, (_, index) => index + 1);
+  if (loadError) {
+    return (
+      <section className="pdf-pane empty-pane" data-pane-id={pane}>
+        <div>
+          <h3>PDF読み込みエラー</h3>
+          <pre>{loadError}</pre>
+        </div>
+      </section>
+    );
+  }
+
+  if (!pdf) {
+    return (
+      <section className="pdf-pane empty-pane" data-pane-id={pane}>
+        <div>PDFを読み込み中...</div>
+      </section>
+    );
+  }
+
+  const visiblePageNumbers = fullscreenMode
+    ? [paneState.pageNumber]
+    : Array.from({ length: pdf.numPages }, (_, index) => index + 1);
 
   return (
-    <section ref={containerRef} className={isActive ? "pdf-pane active-pane" : "pdf-pane"} data-pane-id={pane} onScroll={handleScroll}>
-      <div className="pane-status">{pane === "left" ? "左" : "右"} / p.{paneState.pageNumber} / {paneState.totalPages} / {Math.round(effectiveScale * 100)}%</div>
+    <section
+      ref={containerRef}
+      className={isActive ? "pdf-pane active-pane" : "pdf-pane"}
+      data-pane-id={pane}
+      onScroll={handleScroll}
+    >
+      <div className="pane-status">
+        {pane === "left" ? "左" : "右"} / p.{paneState.pageNumber} / {paneState.totalPages} / {Math.round(effectiveScale * 100)}%
+      </div>
+
       {visiblePageNumbers.map((pageNumber) => (
-        <div key={pageNumber} className="pdf-page-wrapper" ref={(element) => { pageRefs.current[pageNumber] = element; }} data-page-wrapper={pageNumber}>
-          <PdfPage pane={pane} pdf={pdf} pageNumber={pageNumber} scale={effectiveScale} debugTextLayer={debugTextLayer} onTextItems={(page, items) => onTextItems(pane, page, items)} />
+        <div
+          key={pageNumber}
+          className="pdf-page-wrapper"
+          ref={(element) => {
+            pageRefs.current[pageNumber] = element;
+          }}
+          data-page-wrapper={pageNumber}
+        >
+          <PdfPage
+            pane={pane}
+            pdf={pdf}
+            pageNumber={pageNumber}
+            scale={effectiveScale}
+            debugTextLayer={debugTextLayer}
+            onTextItems={(page, items) => onTextItems(pane, page, items)}
+          />
         </div>
       ))}
     </section>
